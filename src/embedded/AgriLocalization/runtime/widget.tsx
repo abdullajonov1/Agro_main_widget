@@ -43,11 +43,12 @@ import {
   resolveAllowedViloyatsForGroups,
 } from "../../../shared/agri-access-config";
 import {
-  getAgriTableDataLayer,
   queryAgriUniqueIdsForWhere,
+  queryAgriTuriCropMappings,
   buildSpatialJoinWhere,
 } from "../../shared/agri-table-data-source";
 import {
+  getAgriVegetationIndicesLayer,
   queryVegetationAvailableDates,
   queryVegetationLatestDatesByRegion,
   queryVegetationStatusCounts,
@@ -627,6 +628,12 @@ export default class AgriLocalization extends React.PureComponent<
   private _vhResolveGen = 0;
   /** True after VH-only path already resolved uniqueids for this apply. */
   private _vhUniqueIdsReadyForApply = false;
+  /**
+   * When true, applyFiltersPersistent skips await resolveVhMapUniqueIds so
+   * crop/tuman map DE can apply immediately. Uniqueids are resolved after
+   * map paint when a VH status is still active (see applyMapFiltersOptimized).
+   */
+  private _deferVhUniqueIdResolve = false;
   /** Cache: status|date|region|district|crops → uniqueids */
   private _vhUniqueIdCache: Record<string, string[]> = {};
   /** Last successful VH bar payload — reused on VH-only selection toggles. */
@@ -1843,8 +1850,50 @@ export default class AgriLocalization extends React.PureComponent<
               );
               return;
             }
-            // ...and a crop_id for the newly selected turi (crop type), used by
-            // the VH "Vegetatsiya Holati" bar computation (computeVhBarData).
+
+            // Map filters by turi text on region-year layers — it does NOT need
+            // vegetation crop_id. Start map immediately so VH bar compute cannot
+            // hold the map surface open. crop_id is resolved only for VH below.
+            if (this._isMounted) {
+              this.setState({ loading: false });
+            }
+            void (async () => {
+              try {
+                await this.applyMapFiltersOptimized(zoomRequest, isApplyCurrent);
+                if (!isApplyCurrent()) {
+                  AgriLocalization.agriLog(
+                    "handleWidgetSelection:SKIP-stale-apply",
+                    { applyId, phase: "after-map-filters" },
+                  );
+                  return;
+                }
+                await this.fetchDataWithCurrentState();
+                if (!isApplyCurrent()) {
+                  AgriLocalization.agriLog(
+                    "handleWidgetSelection:SKIP-stale-apply",
+                    { applyId, phase: "after-fetch-data" },
+                  );
+                }
+              } catch (error: any) {
+                AgriLocalization.agriLog(
+                  "handleWidgetSelection:map-apply-FAILED",
+                  { error: String(error?.message || error) },
+                );
+                if (this._isMounted && isApplyCurrent()) {
+                  this.setState({
+                    error: error?.message || String(error),
+                    loading: false,
+                  });
+                }
+              } finally {
+                if (isApplyCurrent()) {
+                  ++this._mapSurfaceLoadingToken;
+                  this.setMapSurfaceLoading(false, "latest-filter-settled");
+                }
+              }
+            })();
+
+            // VH / vegetation indices need crop_id — resolve after map started.
             await this.ensureCropIdForSelection();
             if (!isApplyCurrent()) {
               AgriLocalization.agriLog(
@@ -1853,6 +1902,9 @@ export default class AgriLocalization extends React.PureComponent<
               );
               return;
             }
+
+            this.broadcastFilterState();
+            return;
           }
 
           if (vhOnly) {
@@ -1952,51 +2004,6 @@ export default class AgriLocalization extends React.PureComponent<
               });
             return;
           }
-
-          // Region / district / crop / year: publish Pie, Bar, Indicators,
-          // Graff immediately after codes resolve. Map zoom/redraw must not
-          // serialize chart updates (same pattern as VH-only above).
-          if (this._isMounted) {
-            this.setState({ loading: false });
-          }
-          this.broadcastFilterState();
-
-          void (async () => {
-            try {
-              await this.applyMapFiltersOptimized(zoomRequest, isApplyCurrent);
-              if (!isApplyCurrent()) {
-                AgriLocalization.agriLog(
-                  "handleWidgetSelection:SKIP-stale-apply",
-                  { applyId, phase: "after-map-filters" },
-                );
-                return;
-              }
-              await this.fetchDataWithCurrentState();
-              if (!isApplyCurrent()) {
-                AgriLocalization.agriLog(
-                  "handleWidgetSelection:SKIP-stale-apply",
-                  { applyId, phase: "after-fetch-data" },
-                );
-              }
-            } catch (error: any) {
-              AgriLocalization.agriLog(
-                "handleWidgetSelection:map-apply-FAILED",
-                { error: String(error?.message || error) },
-              );
-              if (this._isMounted && isApplyCurrent()) {
-                this.setState({
-                  error: error?.message || String(error),
-                  loading: false,
-                });
-              }
-            } finally {
-              if (isApplyCurrent()) {
-                ++this._mapSurfaceLoadingToken;
-                this.setMapSurfaceLoading(false, "latest-filter-settled");
-              }
-            }
-          })();
-          return;
         } catch (e: any) {
           if (this._isMounted && isApplyCurrent()) {
             this.setState({ error: e.message, loading: false });
@@ -3125,6 +3132,11 @@ export default class AgriLocalization extends React.PureComponent<
     const run = (async () => {
       this.setState({ loading: true });
       this._allowClearOnce = true;
+      // Warm vegetation FeatureLayer in parallel so the first ekin-turi VH
+      // refresh does not pay layer-load latency.
+      void getAgriVegetationIndicesLayer().catch(() => {
+        /* best-effort warmup */
+      });
       await Promise.all([
         this.buildLayerViloyatIndex(),
         this.fetchFilterOptions(),
@@ -3323,6 +3335,18 @@ export default class AgriLocalization extends React.PureComponent<
       this._tumanToDistrict = tumanToDistrict;
       this._turiToCropId = turiToCropId;
     } catch (e) {}
+
+    // Full turi→crop_id dictionary from Agri_table_data so the first Pie crop
+    // click does not wait on a per-layer sample miss + ensureCropId query.
+    try {
+      const turiCropRows = await queryAgriTuriCropMappings();
+      for (const row of turiCropRows) {
+        const key = this.makeRegionDistrictKey(row.turi);
+        if (key && row.cropId) this._turiToCropId[key] = row.cropId;
+      }
+    } catch {
+      /* sample map above remains as fallback */
+    }
   };
 
   /**
@@ -5287,24 +5311,9 @@ export default class AgriLocalization extends React.PureComponent<
               ),
             );
             usedOverview = true;
-            const hasAny = resultGroups.some((group) =>
-              group.some(
-                (row) =>
-                  (Number(row.count) || 0) > 0 || (Number(row.areaHa) || 0) > 0,
-              ),
-            );
-            // Overview returned nothing despite known region dates → exact path.
-            if (!hasAny) {
-              AgriLocalization.agriLog(
-                "computeVhBarData:republic-overview-empty-fallback",
-                {
-                  year: selectedYear || null,
-                  regionCount: regionScopes.length,
-                },
-              );
-              resultGroups = await queryExact();
-              usedOverview = false;
-            }
+            // Successful overview (even all-empty) must NOT fall back to the
+            // uniqueid pager — that was reintroducing the ~700-query storm
+            // whenever the newest dates had no rows for the current crop.
           } catch (overviewError: any) {
             AgriLocalization.agriLog(
               "computeVhBarData:republic-overview-failed-fallback",
@@ -5380,40 +5389,132 @@ export default class AgriLocalization extends React.PureComponent<
       }
       if (!knownDates.length) return zeroResult;
       // queryVegetationAvailableDates returns ascending — try newest first.
+      // Prefer the last successful VH date for this session when it is still
+      // in the candidate list so crop/tuman refreshes skip empty newer dates.
       candidates = knownDates.slice().reverse();
+      const preferredDate = String(this._vhBarUsedDate || "").trim();
+      if (preferredDate && candidates.includes(preferredDate)) {
+        candidates = [
+          preferredDate,
+          ...candidates.filter((date) => date !== preferredDate),
+        ];
+      }
     }
 
     let bestResult: VHBarData | null = null;
     let usedDate: string | null = null;
+    /** True when the accepted date used status-stats overview (no uniqueid paging). */
+    let usedOverviewForBest = false;
 
-    try {
-      for (const ndviDate of candidates) {
-        let rows: Array<{
-          ndvi_status: string;
-          count: number;
-          areaHa: number;
-          uniqueIds: string[];
-        }>;
+    const loadOverviewRows = async (
+      ndviDate: string,
+    ): Promise<{
+      rows: Array<{
+        ndvi_status: string;
+        count: number;
+        areaHa: number;
+        uniqueIds: string[];
+      }>;
+      usedOverview: boolean;
+      overviewSucceeded: boolean;
+    }> => {
+      if (REPUBLIC_VH_USE_STATUS_STATS) {
         try {
-          rows = await queryVegetationStatusCounts({
+          const rows = await queryVegetationStatusCountsByStatus({
             region: regionNum,
             district: districtNum,
             date: ndviDate,
             cropIds: cropIds.length ? cropIds : undefined,
           });
-        } catch {
-          continue;
+          return { rows, usedOverview: true, overviewSucceeded: true };
+        } catch (overviewError: any) {
+          AgriLocalization.agriLog("computeVhBarData:region-overview-failed", {
+            date: ndviDate,
+            region: regionNum,
+            district: districtNum,
+            error: String(overviewError?.message || overviewError),
+          });
         }
+      }
+
+      if (!REPUBLIC_VH_USE_STATUS_STATS) {
+        try {
+          const rows = await queryVegetationStatusCounts({
+            region: regionNum,
+            district: districtNum,
+            date: ndviDate,
+            cropIds: cropIds.length ? cropIds : undefined,
+          });
+          return { rows, usedOverview: false, overviewSucceeded: false };
+        } catch {
+          return { rows: [], usedOverview: false, overviewSucceeded: false };
+        }
+      }
+
+      // Overview threw — one exact attempt for this date only.
+      try {
+        AgriLocalization.agriLog("computeVhBarData:region-exact-fallback", {
+          date: ndviDate,
+          region: regionNum,
+          district: districtNum ?? null,
+        });
+        const rows = await queryVegetationStatusCounts({
+          region: regionNum,
+          district: districtNum,
+          date: ndviDate,
+          cropIds: cropIds.length ? cropIds : undefined,
+        });
+        return { rows, usedOverview: false, overviewSucceeded: false };
+      } catch {
+        return { rows: [], usedOverview: false, overviewSucceeded: false };
+      }
+    };
+
+    try {
+      // First ekin-turi click is slow because the viloyat-wide preferred date
+      // often has no rows for that crop, and walking dates one-by-one waits
+      // on many empty overview round-trips. Probe a small newest batch in
+      // parallel; later clicks stay fast via _vhBarUsedDate + caches.
+      const probeParallel = cropIds.length > 0 && candidates.length > 1;
+      const PROBE_BATCH = 8;
+      let candidateOffset = 0;
+
+      while (candidateOffset < candidates.length && !bestResult) {
+        const batch = probeParallel
+          ? candidates.slice(candidateOffset, candidateOffset + PROBE_BATCH)
+          : [candidates[candidateOffset]];
+        candidateOffset += batch.length;
+
+        const batchResults = probeParallel
+          ? await Promise.all(
+              batch.map(async (ndviDate) => {
+                const loaded = await loadOverviewRows(ndviDate);
+                return { ndviDate, ...loaded };
+              }),
+            )
+          : [
+              {
+                ndviDate: batch[0],
+                ...(await loadOverviewRows(batch[0])),
+              },
+            ];
         if (!this._isMounted) return null;
 
-        const aggregated = this.aggregateVhServiceRows(rows);
-        const { categories, totalCount } = aggregated;
-
-        // Only accept this date if it actually has data; otherwise
-        // continue and let the loop try earlier NDVI dates.
-        if (totalCount > 0) {
+        for (const item of batchResults) {
+          const aggregated = this.aggregateVhServiceRows(item.rows);
+          if (aggregated.totalCount <= 0) continue;
           bestResult = aggregated;
-          usedDate = ndviDate;
+          usedDate = item.ndviDate;
+          usedOverviewForBest = item.usedOverview;
+          AgriLocalization.agriLog("computeVhBarData:region-result", {
+            date: item.ndviDate,
+            region: regionNum,
+            district: districtNum ?? null,
+            usedOverview: item.usedOverview,
+            cropIds: cropIds.length ? cropIds : null,
+            probeParallel,
+            totalAreaHa: aggregated.totalCount,
+          });
           break;
         }
       }
@@ -5425,7 +5526,12 @@ export default class AgriLocalization extends React.PureComponent<
 
       if (usedDate) {
         this._vhBarUsedDate = usedDate;
-        this.prefetchVhStatusUniqueIds(usedDate);
+        // Exact path already warms uniqueid cache — prefetch helps VH clicks.
+        // Overview path skips prefetch so crop/tuman bar refresh stays fast;
+        // resolveVhMapUniqueIds still loads ids when a VH bucket is clicked.
+        if (!usedOverviewForBest) {
+          this.prefetchVhStatusUniqueIds(usedDate);
+        }
       }
 
       if (
@@ -6025,8 +6131,15 @@ export default class AgriLocalization extends React.PureComponent<
 
     // Resolve VH → uniqueids before touching MapImage definitionExpression.
     // VH-only path already resolved once — skip the duplicate table walk.
+    // Crop/tuman refreshes defer uniqueids so the map is not blocked by VH
+    // paging; AgriBar clicks never set _deferVhUniqueIdResolve.
     if (this._vhUniqueIdsReadyForApply) {
       this._vhUniqueIdsReadyForApply = false;
+    } else if (this._deferVhUniqueIdResolve) {
+      // First paint: geography/crop only. Drop stale uniqueid IN (...) from the
+      // previous crop so the map is not under-filtered while ids reload.
+      // buildWhereClause falls back to the polygon `vh` attribute until then.
+      this._vhMapUniqueIds = null;
     } else {
       await this.resolveVhMapUniqueIds(isCurrent);
       if (isCurrent && !isCurrent()) return;
@@ -6293,7 +6406,8 @@ export default class AgriLocalization extends React.PureComponent<
     // Cover the map only when a region layer is about to be revealed from
     // scratch (opacity 0 / new year-region). Re-filtering tuman/turi on an
     // already-visible opaque layer must stay clickable — otherwise the
-    // overlay eats the first polygon click and other districts flash briefly.
+    // overlay eats the first polygon click and makes VH bar lag feel like
+    // it is blocking the map.
     const expectRegionLayer = !!String(this.getEffectiveViloyat() || "").trim();
     const alreadyOpaqueRegion =
       expectRegionLayer &&
@@ -6314,11 +6428,10 @@ export default class AgriLocalization extends React.PureComponent<
       vhOnly &&
       !!String(this.state.vh || "").trim() &&
       Array.isArray(this._vhMapUniqueIds);
-    const filterLoadingReasons: MapZoomReason[] = [
+    // Full-cover reasons that reveal/replace layers. crop/district on an
+    // already-opaque region must NOT cover — DE updates are fast there.
+    const heavyCoverReasons: MapZoomReason[] = [
       "region",
-      "district",
-      "district-clear",
-      "crop",
       "year",
       "ndvi",
       "reset",
@@ -6326,7 +6439,7 @@ export default class AgriLocalization extends React.PureComponent<
     const coverMap =
       coverForCropReveal ||
       (vhOnly && !vhCacheWarm) ||
-      filterLoadingReasons.includes(zoomRequest.reason);
+      heavyCoverReasons.includes(zoomRequest.reason);
     const coverReason = vhOnly
       ? "vegetation"
       : coverForCropReveal
@@ -6344,9 +6457,35 @@ export default class AgriLocalization extends React.PureComponent<
 
     const prevExpr = this._prevDefinitionExpression;
     let revealAfterCrop = false;
+    const deferVhIds =
+      !vhOnly &&
+      !!String(this.state.vh || "").trim() &&
+      (zoomRequest.reason === "crop" ||
+        zoomRequest.reason === "district" ||
+        zoomRequest.reason === "district-clear");
+    this._deferVhUniqueIdResolve = deferVhIds;
     try {
       await this.applyFiltersPersistent(stillCurrent);
       if (!stillCurrent()) return;
+
+      // Crop/tuman first paint done — resolve VH uniqueids in background and
+      // re-apply DE without covering the map again.
+      if (deferVhIds && stillCurrent()) {
+        this._deferVhUniqueIdResolve = false;
+        void (async () => {
+          try {
+            await this.resolveVhMapUniqueIds(stillCurrent);
+            if (!stillCurrent()) return;
+            this._vhUniqueIdsReadyForApply = true;
+            await this.applyFiltersPersistent(stillCurrent);
+          } catch (error: any) {
+            AgriLocalization.agriLog(
+              "applyMapFiltersOptimized:deferred-vh-FAILED",
+              { error: String(error?.message || error) },
+            );
+          }
+        })();
+      }
 
       // Only the opacity-0 → crop → opacity-1 dance for layers that are
       // still hidden; already-opaque region layers only need expression refresh.
@@ -6379,6 +6518,7 @@ export default class AgriLocalization extends React.PureComponent<
         });
       }
     } finally {
+      this._deferVhUniqueIdResolve = false;
       if (revealAfterCrop) this.setShownRegionYearOpacity(1);
       // Always clear if this call still owns the overlay — including when the
       // apply went stale. Previously we only cleared when stillCurrent, which

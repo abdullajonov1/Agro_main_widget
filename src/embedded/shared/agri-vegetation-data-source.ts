@@ -245,40 +245,63 @@ export interface VegetationScopeParams {
  * only worked against a layer that actually had those wide columns
  * (Agri_table_data doesn't).
  */
+const vegetationAvailableDatesCache = new Map<string, Promise<string[]>>();
+
 export async function queryVegetationAvailableDates(
   params: VegetationScopeParams = {},
 ): Promise<string[]> {
-  const { layer } = await getAgriVegetationIndicesLayer();
+  const cacheKey = `r=${params.region ?? ""}|d=${params.district ?? ""}`;
+  const cached = vegetationAvailableDatesCache.get(cacheKey);
+  if (cached) return cached;
 
-  const clauses: string[] = [];
-  if (params.region != null) {
-    clauses.push(`region='${escapeAgriVeg(String(params.region))}'`);
-  }
-  if (params.district != null) {
-    clauses.push(`district='${escapeAgriVeg(String(params.district))}'`);
-  }
-  const where = clauses.length ? clauses.join(" AND ") : "1=1";
+  const request = (async (): Promise<string[]> => {
+    const { layer } = await getAgriVegetationIndicesLayer();
 
-  const query = layer.createQuery();
-  query.where = where;
-  query.groupByFieldsForStatistics = ["raster_date"];
-  query.orderByFields = ["raster_date ASC"];
-  query.outStatistics = [
-    {
-      statisticType: "count",
-      onStatisticField: "objectid",
-      outStatisticFieldName: "cnt",
-    },
-  ] as any;
-  query.returnGeometry = false;
+    const clauses: string[] = [];
+    if (params.region != null) {
+      clauses.push(`region='${escapeAgriVeg(String(params.region))}'`);
+    }
+    if (params.district != null) {
+      clauses.push(`district='${escapeAgriVeg(String(params.district))}'`);
+    }
+    const where = clauses.length ? clauses.join(" AND ") : "1=1";
 
-  const result = await layer.queryFeatures(query);
-  const dateSet = new Set<string>();
-  for (const feature of result?.features ?? []) {
-    const ymd = formatArcgisDateToYmd((feature as any)?.attributes?.raster_date);
-    if (ymd) dateSet.add(ymd);
+    const query = layer.createQuery();
+    query.where = where;
+    query.groupByFieldsForStatistics = ["raster_date"];
+    query.orderByFields = ["raster_date ASC"];
+    query.outStatistics = [
+      {
+        statisticType: "count",
+        onStatisticField: "objectid",
+        outStatisticFieldName: "cnt",
+      },
+    ] as any;
+    query.returnGeometry = false;
+
+    const result = await layer.queryFeatures(query);
+    const dateSet = new Set<string>();
+    for (const feature of result?.features ?? []) {
+      const ymd = formatArcgisDateToYmd(
+        (feature as any)?.attributes?.raster_date,
+      );
+      if (ymd) dateSet.add(ymd);
+    }
+    return Array.from(dateSet).sort();
+  })();
+
+  vegetationAvailableDatesCache.set(cacheKey, request);
+  while (vegetationAvailableDatesCache.size > 32) {
+    const oldestKey = vegetationAvailableDatesCache.keys().next().value;
+    if (!oldestKey) break;
+    vegetationAvailableDatesCache.delete(oldestKey);
   }
-  return Array.from(dateSet).sort();
+  try {
+    return await request;
+  } catch (error) {
+    vegetationAvailableDatesCache.delete(cacheKey);
+    throw error;
+  }
 }
 
 export interface VegetationLatestDateByRegion {
@@ -678,8 +701,9 @@ export async function queryVegetationStatusCounts(
 }
 
 /**
- * Kill-switch for republic VH overview. When false, Localization always uses
- * the exact uniqueid majority-vote pager (legacy ~700 queries on startup).
+ * Kill-switch for lightweight VH bar totals (groupBy ndvi_status only).
+ * When false, Localization always uses the exact uniqueid majority-vote pager.
+ * Applies to both republic overview and viloyat/tuman bar refresh (crop/tuman).
  */
 export const REPUBLIC_VH_USE_STATUS_STATS = true;
 
