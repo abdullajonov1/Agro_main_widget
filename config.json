@@ -1,0 +1,29 @@
+{
+  "leftPanelWidthPercent": 25,
+  "bottomRowFraction": 38,
+  "webMapDataSourceId": "",
+  "indicator": {
+    "useApiDataSource": false,
+    "statOperation": "sum",
+    "attributeField": "maydon",
+    "label": "Ekin maydonlari",
+    "unitLabel": "ga",
+    "decimalPlaces": 0,
+    "excludeZeroValues": true
+  },
+  "agriPopup": {
+    "fieldsToShow": [],
+    "titleField": "",
+    "labels": {},
+    "settings": {
+      "zoomToSelection": true,
+      "showMapPopup": false,
+      "showAttachments": true
+    },
+    "chartEnabled": false,
+    "chartType": "bar",
+    "chartTitle": "",
+    "chartFields": [],
+    "chartColor": "#00a8e8"
+  }
+}

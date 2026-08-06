@@ -1,0 +1,2896 @@
+@import url("https://fonts.googleapis.com/css2?family=Geologica:wght@100..900&display=swap");
+@import "../shared/agri-dashboard-spinner.css";
+
+.agri-dashboard-v3 {
+  --agri-font-family: "Geologica", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --agri-dashboard-gap: clamp(8px, 0.7vw, 12px);
+  --agri-dashboard-edge: clamp(8px, 0.7vw, 12px);
+  --agri-dashboard-header-height: clamp(62px, 7.2vh, 80px);
+  --agri-dashboard-left-width: 25%;
+  --agri-dashboard-top-fr: 62;
+  --agri-dashboard-bottom-fr: 38;
+  --agri-dashboard-indicator-top: 10px;
+  --agri-dashboard-indicator-left: 10px;
+  --agri-dashboard-indicator-right: 10px;
+  /* Total width of the indicator row (3 additional indicators + the existing one,
+     each 220px — see .agri-dashboard-indicator-slot — plus 3 8px gaps). */
+  --agri-dashboard-indicator-width: 904px;
+  --agri-dashboard-indicator-height: 72px;
+  --agri-dashboard-date-index-top: 12px;
+  --agri-dashboard-date-index-bottom: 12px;
+  --agri-dashboard-popup-width: 340px;
+  --agri-dashboard-popup-inset-x: 16px;
+  --agri-dashboard-date-index-gap: 8px;
+  /* Default: bottom-right of map. Shifts left of popup only when pinned. */
+  --agri-dashboard-date-index-right: 10px;
+  --agri-dashboard-date-index-width: 168px;
+  --agri-dashboard-date-index-height: 66px;
+  --agri-map-slot-bg: #071a2b;
+  --agri-map-slot-border: rgba(126, 214, 255, 0.24);
+  --agri-dashboard-bg: #0a101a;
+  --agri-widget-panel-bg: #1f2030;
+  --agri-widget-radius: 20px;
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  pointer-events: auto;
+  box-sizing: border-box;
+  font-family: var(--agri-font-family);
+  background: var(--agri-dashboard-bg);
+}
+
+/* Force Geologica across dashboard + portaled map overlays (indicators/popup). */
+.agri-dashboard-v3,
+.agri-dashboard-v3 *:not(code):not(pre):not(kbd):not(samp),
+.agri-dashboard-indicator-drawer,
+.agri-dashboard-indicator-drawer *:not(code):not(pre),
+.agri-dashboard-date-index-overlay,
+.agri-dashboard-date-index-overlay *:not(code):not(pre),
+.agri-dashboard-managed-indicator,
+.agri-dashboard-managed-indicator *:not(code):not(pre),
+.vegetation-stats-widget,
+.vegetation-stats-widget *:not(code):not(pre),
+.agri3-attr-card,
+.agri3-attr-card *:not(code):not(pre),
+.agri3-popup-shell,
+.agri3-popup-shell *:not(code):not(pre) {
+  font-family: "Geologica", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif !important;
+}
+
+.agri-dashboard-v3.agri-popup-pinned {
+  --agri-dashboard-date-index-right: 364px;
+}
+
+.agri-dashboard-embedded-map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+}
+
+/* Kill browser / Esri blue focus ring when clicking the map */
+.agri-dashboard-map-slot,
+.agri-dashboard-map-slot:focus,
+.agri-dashboard-map-slot:focus-visible,
+.agri-dashboard-map-slot:focus-within,
+.agri-dashboard-embedded-map,
+.agri-dashboard-embedded-map:focus,
+.agri-dashboard-embedded-map:focus-visible,
+.agri-dashboard-embedded-map:focus-within,
+.agri-dashboard-managed-map,
+.agri-dashboard-managed-map:focus,
+.agri-dashboard-managed-map:focus-visible,
+.agri-dashboard-managed-map:focus-within,
+.agri-dashboard-map-slot .esri-view,
+.agri-dashboard-map-slot .esri-view:focus,
+.agri-dashboard-map-slot .esri-view:focus-visible,
+.agri-dashboard-map-slot .esri-view:focus-within,
+.agri-dashboard-map-slot .esri-view-root,
+.agri-dashboard-map-slot .esri-view-root:focus,
+.agri-dashboard-map-slot .esri-view-surface,
+.agri-dashboard-map-slot .esri-view-surface:focus,
+.agri-dashboard-map-slot canvas,
+.agri-dashboard-map-slot canvas:focus,
+.agri-dashboard-managed-map .esri-view,
+.agri-dashboard-managed-map .esri-view:focus,
+.agri-dashboard-managed-map .esri-view:focus-visible,
+.agri-dashboard-managed-map .esri-view:focus-within,
+.agri-dashboard-managed-map .esri-view-root,
+.agri-dashboard-managed-map .esri-view-surface,
+.agri-dashboard-managed-map canvas,
+.agri-dashboard-managed-map canvas:focus {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide Esri attribution control on the embedded map. */
+.agri-dashboard-embedded-map .esri-attribution,
+.agri-dashboard-embedded-map .esri-ui-inner-container .esri-attribution {
+  display: none !important;
+}
+.agri-dashboard-map-error {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  max-width: 80%;
+  transform: translate(-50%, -50%);
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(120, 20, 20, 0.88);
+  text-align: center;
+  font-size: 12px;
+}
+
+.agri-dashboard-map-controls {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  z-index: 14;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+
+.agri-dashboard-basemap-control {
+  position: absolute;
+  top: calc(10px + 46px + 36px);
+  left: 10px;
+  z-index: 14;
+  pointer-events: auto;
+}
+
+.agri-dashboard-fullscreen-button {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 14;
+  pointer-events: auto;
+}
+
+.agri-dashboard-map-control-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  filter: var(--agri-map-control-icon-filter-default);
+  transition: filter 0.15s ease;
+}
+
+.agri-dashboard-basemap-button.is-active,
+.agri-dashboard-fullscreen-button.is-active {
+  background: var(--agri-map-accent-active);
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.agri-dashboard-basemap-button.is-active .agri-dashboard-map-control-icon,
+.agri-dashboard-fullscreen-button.is-active .agri-dashboard-map-control-icon {
+  filter: var(--agri-map-control-icon-filter-white);
+}
+
+.agri-dashboard-basemap-menu {
+  position: absolute;
+  top: 0;
+  left: 58px;
+  width: 220px;
+  padding: 9px;
+  border: 1px solid rgba(126, 214, 255, 0.18);
+  border-radius: 18px;
+  background: #151522;
+  color: #f4f7fb;
+  box-shadow: none;
+}
+
+.agri-dashboard-basemap-menu-title {
+  padding: 6px 8px 10px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.agri-dashboard-basemap-option {
+  width: 100%;
+  min-height: 40px;
+  margin: 0 0 5px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #292a3d;
+  color: #f3f5f8;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.agri-dashboard-basemap-option.is-active {
+  background: #0ea5e9;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.agri-dashboard-basemap-option:hover,
+.agri-dashboard-basemap-option:focus-visible {
+  outline: none;
+  background: #347ff0;
+  transform: translateX(2px);
+}
+
+.agri-dashboard-basemap-borders-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px 12px 4px;
+  border-top: 1px solid rgba(126, 214, 255, 0.14);
+}
+
+.agri-dashboard-basemap-borders-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: inherit;
+}
+
+.agri-dashboard-basemap-borders-toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 42px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #3a3b52;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.agri-dashboard-basemap-borders-toggle.is-on {
+  background: #0ea5e9;
+}
+
+.agri-dashboard-basemap-borders-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  transition: transform 0.18s ease;
+}
+
+.agri-dashboard-basemap-borders-toggle.is-on .agri-dashboard-basemap-borders-thumb {
+  transform: translateX(18px);
+}
+
+html.light-theme .agri-dashboard-basemap-menu,
+html[data-theme="light"] .agri-dashboard-basemap-menu,
+body.light-theme .agri-dashboard-basemap-menu {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: none;
+}
+
+html.light-theme .agri-dashboard-basemap-option,
+html[data-theme="light"] .agri-dashboard-basemap-option,
+body.light-theme .agri-dashboard-basemap-option {
+  background: #eef2f7;
+  color: #0f172a;
+}
+
+html.light-theme .agri-dashboard-basemap-option.is-active,
+html[data-theme="light"] .agri-dashboard-basemap-option.is-active,
+body.light-theme .agri-dashboard-basemap-option.is-active {
+  background: #0284c7;
+  color: #ffffff;
+}
+html.light-theme .agri-dashboard-basemap-option:hover,
+html[data-theme="light"] .agri-dashboard-basemap-option:hover,
+body.light-theme .agri-dashboard-basemap-option:hover {
+  background: #347ff0;
+  color: #ffffff;
+}
+
+html.light-theme .agri-dashboard-basemap-borders-row,
+html[data-theme="light"] .agri-dashboard-basemap-borders-row,
+body.light-theme .agri-dashboard-basemap-borders-row {
+  border-top-color: rgba(15, 23, 42, 0.1);
+}
+
+html.light-theme .agri-dashboard-basemap-borders-toggle:not(.is-on),
+html[data-theme="light"] .agri-dashboard-basemap-borders-toggle:not(.is-on),
+body.light-theme .agri-dashboard-basemap-borders-toggle:not(.is-on) {
+  background: #cbd5e1;
+}
+
+.agri-dashboard-map-zoom-button {
+  width: 46px;
+  height: 46px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  background: var(--agri-map-control-bg, rgba(31, 32, 48, 0.92));
+  color: #e9f8ff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: none;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.agri-dashboard-map-zoom-button:hover:not(:active):not(.is-active) {
+  background: var(--agri-map-control-bg-hover, color-mix(in srgb, #3b82f6 14%, rgba(31, 32, 48, 0.92)));
+  color: var(--agri-map-accent, #3b82f6);
+}
+
+.agri-dashboard-map-zoom-button:hover:not(:active):not(.is-active) .agri-dashboard-map-control-icon {
+  filter: var(--agri-map-control-icon-filter-blue);
+}
+
+.agri-dashboard-map-zoom-button:active:not(:disabled),
+.agri-dashboard-map-zoom-button.is-active {
+  background: var(--agri-map-accent-active, #2563eb);
+  color: #ffffff;
+}
+
+.agri-dashboard-map-zoom-button:active:not(:disabled) .agri-dashboard-map-control-icon,
+.agri-dashboard-map-zoom-button.is-active .agri-dashboard-map-control-icon {
+  filter: var(--agri-map-control-icon-filter-white);
+}
+
+.agri-dashboard-map-zoom-button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.agri-dashboard-map-zoom-button:focus-visible {
+  outline: 2px solid var(--agri-map-accent-active, #2563eb);
+  outline-offset: 2px;
+}
+
+html.light-theme .agri-dashboard-map-slot,
+html[data-theme="light"] .agri-dashboard-map-slot,
+body.light-theme .agri-dashboard-map-slot {
+  --agri-map-control-bg: #ffffff;
+  --agri-map-control-bg-hover: color-mix(in srgb, #3b82f6 12%, #ffffff);
+  --agri-map-control-icon-filter-default: none;
+}
+
+/* basemap.svg is white-filled — force dark in light theme */
+html.light-theme .agri-dashboard-basemap-button:not(:active):not(.is-active) .agri-dashboard-map-control-icon,
+html[data-theme="light"] .agri-dashboard-basemap-button:not(:active):not(.is-active) .agri-dashboard-map-control-icon,
+body.light-theme .agri-dashboard-basemap-button:not(:active):not(.is-active) .agri-dashboard-map-control-icon {
+  filter: brightness(0);
+}
+
+html.light-theme .agri-dashboard-basemap-button:hover:not(:active):not(.is-active) .agri-dashboard-map-control-icon,
+html[data-theme="light"] .agri-dashboard-basemap-button:hover:not(:active):not(.is-active) .agri-dashboard-map-control-icon,
+body.light-theme .agri-dashboard-basemap-button:hover:not(:active):not(.is-active) .agri-dashboard-map-control-icon {
+  filter: var(--agri-map-control-icon-filter-blue);
+}
+
+html.light-theme .agri-dashboard-map-zoom-button,
+html[data-theme="light"] .agri-dashboard-map-zoom-button,
+body.light-theme .agri-dashboard-map-zoom-button {
+  background: var(--agri-map-control-bg);
+  color: #0f172a;
+  box-shadow: none;
+}
+
+html.light-theme .agri-dashboard-map-zoom-button:hover:not(:active):not(.is-active),
+html[data-theme="light"] .agri-dashboard-map-zoom-button:hover:not(:active):not(.is-active),
+body.light-theme .agri-dashboard-map-zoom-button:hover:not(:active):not(.is-active) {
+  background: var(--agri-map-control-bg-hover);
+  color: var(--agri-map-accent, #3b82f6);
+}
+
+html.light-theme .agri-dashboard-map-zoom-button.is-active,
+html[data-theme="light"] .agri-dashboard-map-zoom-button.is-active,
+body.light-theme .agri-dashboard-map-zoom-button.is-active,
+html.light-theme .agri-dashboard-map-zoom-button:active:not(:disabled),
+html[data-theme="light"] .agri-dashboard-map-zoom-button:active:not(:disabled),
+body.light-theme .agri-dashboard-map-zoom-button:active:not(:disabled) {
+  background: var(--agri-map-accent-active, #2563eb);
+  color: #ffffff;
+}
+
+html.light-theme .agri-dashboard-map-zoom-button.is-active .agri-dashboard-map-control-icon,
+html[data-theme="light"] .agri-dashboard-map-zoom-button.is-active .agri-dashboard-map-control-icon,
+body.light-theme .agri-dashboard-map-zoom-button.is-active .agri-dashboard-map-control-icon,
+html.light-theme .agri-dashboard-map-zoom-button:active:not(:disabled) .agri-dashboard-map-control-icon,
+html[data-theme="light"] .agri-dashboard-map-zoom-button:active:not(:disabled) .agri-dashboard-map-control-icon,
+body.light-theme .agri-dashboard-map-zoom-button:active:not(:disabled) .agri-dashboard-map-control-icon {
+  filter: var(--agri-map-control-icon-filter-white);
+}
+
+html.light-theme .agri-dashboard-v3,
+html[data-theme="light"] .agri-dashboard-v3,
+body.light-theme .agri-dashboard-v3 {
+  --agri-dashboard-bg: #eff6ff;
+  background: #eff6ff;
+}
+
+.agri-dashboard-header {
+  position: absolute;
+  top: var(--agri-dashboard-edge);
+  left: var(--agri-dashboard-edge);
+  right: var(--agri-dashboard-edge);
+  height: var(--agri-dashboard-header-height);
+  min-width: 0;
+  pointer-events: auto;
+  z-index: 30;
+}
+
+.agri-dashboard-body {
+  position: absolute;
+  top: calc(
+    var(--agri-dashboard-edge) + var(--agri-dashboard-header-height) +
+      var(--agri-dashboard-gap)
+  );
+  left: var(--agri-dashboard-edge);
+  right: var(--agri-dashboard-edge);
+  bottom: var(--agri-dashboard-edge);
+  display: grid;
+  grid-template-rows: minmax(0, 62fr) minmax(220px, 38fr);
+  gap: var(--agri-dashboard-gap);
+  min-width: 0;
+  min-height: 0;
+  z-index: 5;
+}
+
+.agri-dashboard-top-row {
+  display: grid;
+  /* Same 1+2+1 track as bottom row so Viloyatlar = Ekin turi (pie) width. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--agri-dashboard-gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+.agri-dashboard-left-panel {
+  min-width: 0;
+  min-height: 0;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.agri-dashboard-top-row > .agri-dashboard-map-slot {
+  grid-column: 2 / -1;
+}
+
+.agri-dashboard-bottom-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--agri-dashboard-gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+.agri-dashboard-widget-slot {
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: auto;
+  border-radius: var(--agri-widget-radius);
+}
+
+.agri-dashboard-map-slot {
+  --agri-map-accent: #3b82f6;
+  --agri-map-accent-active: #2563eb;
+  --agri-map-control-bg: rgba(31, 32, 48, 0.92);
+  --agri-map-control-bg-hover: color-mix(in srgb, var(--agri-map-accent) 14%, var(--agri-map-control-bg));
+  --agri-map-control-icon-filter-blue: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(1352%) hue-rotate(198deg) brightness(97%) contrast(95%);
+  --agri-map-control-icon-filter-white: brightness(0) invert(1);
+  --agri-map-control-icon-filter-default: brightness(0) invert(1);
+
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--agri-widget-radius);
+  overflow: hidden;
+  pointer-events: none;
+  border: none;
+  background:
+    radial-gradient(
+      120% 90% at 14% 10%,
+      rgba(83, 226, 255, 0.12),
+      transparent 58%
+    ),
+    linear-gradient(156deg, var(--agri-map-slot-bg) 0%, #0d2f49 100%);
+  box-shadow: none;
+}
+
+.agri-dashboard-map-slot:fullscreen,
+.agri-dashboard-map-slot:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  min-width: 100vw;
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+  background: #071a2b;
+}
+
+.agri-dashboard-map-slot::backdrop {
+  background: #071a2b;
+}
+
+.agri-dashboard-map-slot.has-map {
+  background: transparent;
+  border: none;
+  z-index: 13;
+}
+
+/* Basemap chooser must stay above the fixed indicator portals while open. */
+html.agri-basemap-menu-open .agri-dashboard-map-slot.has-map {
+  z-index: 60;
+}
+
+html.agri-basemap-menu-open .agri-dashboard-basemap-menu {
+  z-index: 61;
+}
+.agri-dashboard-map-slot.is-loading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: rgba(7, 26, 43, 0.18);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.agri-dashboard-map-slot.is-loading .agri-dashboard-embedded-map {
+  filter: blur(3px);
+  transform: scale(1.01);
+  transition: filter 0.2s ease;
+}
+
+.agri-dashboard-map-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: transparent;
+}
+
+.agri-dashboard-map-loading-overlay .agri-chart-loader {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  --chart-loader-scale: 1.15;
+}
+
+.agri-dashboard-map-no-data {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.agri-dashboard-map-no-data-card {
+  max-width: min(360px, calc(100% - 48px));
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  color: #eef6ff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  background: rgba(11, 23, 38, 0.86);
+  box-shadow: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.agri-dashboard-map-no-data-title {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.agri-dashboard-map-slot-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  color: #9cc7dd;
+  pointer-events: none;
+}
+
+.agri-dashboard-map-slot-icon {
+  font-size: 28px;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.agri-dashboard-map-slot-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #e9f8ff;
+  letter-spacing: 0.02em;
+}
+
+.agri-dashboard-map-slot-hint {
+  max-width: 280px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #7ea8be;
+}
+
+.agri-dashboard-portal-host {
+  position: static;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 30;
+}
+
+/* Portal renders outside .agri-dashboard-v3 — keep indicator tokens here. */
+html.agri-dashboard-active,
+.agri-dashboard-indicator-drawer {
+  --agri-dashboard-indicator-toggle-width: 46px;
+  --agri-dashboard-indicator-panel-gap: 8px;
+  --agri-dashboard-indicator-slot-gap: 8px;
+  --agri-dashboard-indicator-slot-width: 176px;
+  --agri-dashboard-indicator-panel-width: 728px;
+  --agri-dashboard-indicator-height: 72px;
+  --agri-dashboard-indicator-drawer-width: 782px;
+}
+
+.agri-dashboard-indicator-drawer,
+.agri-dashboard-indicator-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  z-index: 40;
+  box-sizing: border-box;
+  overflow: visible;
+  pointer-events: none;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  direction: ltr;
+  gap: var(--agri-dashboard-indicator-panel-gap);
+  height: var(--agri-dashboard-indicator-height);
+  width: auto;
+  max-width: var(--agri-dashboard-indicator-drawer-width);
+  background: transparent;
+  border: none;
+}
+
+.agri-dashboard-indicator-toggle {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 var(--agri-dashboard-indicator-toggle-width);
+  width: var(--agri-dashboard-indicator-toggle-width);
+  height: var(--agri-dashboard-indicator-toggle-width);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(165deg, #1f2030 0%, #162436 100%);
+  color: #e9f8ff;
+  cursor: pointer;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.agri-dashboard-indicator-toggle:hover {
+  background: linear-gradient(165deg, #273149 0%, #1a3148 100%);
+  transform: scale(1.03);
+}
+
+.agri-dashboard-indicator-toggle:focus-visible {
+  outline: 2px solid rgba(83, 226, 255, 0.85);
+  outline-offset: 2px;
+}
+
+.agri-dashboard-indicator-toggle-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  transition: transform 300ms ease;
+}
+
+.agri-dashboard-indicator-toggle-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.agri-dashboard-indicator-drawer--collapsed
+  .agri-dashboard-indicator-toggle-icon,
+.agri-dashboard-indicator-drawer--collapsing
+  .agri-dashboard-indicator-toggle-icon {
+  transform: rotate(0deg);
+}
+
+.agri-dashboard-indicator-drawer--expanded
+  .agri-dashboard-indicator-toggle-icon,
+.agri-dashboard-indicator-drawer--expanding
+  .agri-dashboard-indicator-toggle-icon {
+  transform: rotate(180deg);
+}
+
+.agri-dashboard-indicator-panel-clip {
+  overflow: hidden;
+  width: var(--agri-dashboard-indicator-panel-width);
+  min-width: 0;
+  max-width: var(--agri-dashboard-indicator-panel-width);
+  height: var(--agri-dashboard-indicator-height);
+  flex: 0 0 var(--agri-dashboard-indicator-panel-width);
+  pointer-events: none;
+  border-radius: 20px;
+}
+
+.agri-dashboard-indicator-drawer--expanded .agri-dashboard-indicator-panel-clip,
+.agri-dashboard-indicator-drawer--expanding .agri-dashboard-indicator-panel-clip {
+  pointer-events: auto;
+}
+
+.agri-dashboard-indicator-panel {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  direction: ltr;
+  gap: var(--agri-dashboard-indicator-slot-gap);
+  width: var(--agri-dashboard-indicator-panel-width);
+  min-width: var(--agri-dashboard-indicator-panel-width);
+  height: var(--agri-dashboard-indicator-height);
+  min-height: var(--agri-dashboard-indicator-height);
+  max-height: var(--agri-dashboard-indicator-height);
+  pointer-events: auto;
+}
+
+.agri-dashboard-indicator-slot {
+  flex: 0 0 var(--agri-dashboard-indicator-slot-width);
+  width: var(--agri-dashboard-indicator-slot-width);
+  height: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border-radius: 20px;
+  overflow: hidden;
+  transform-origin: left center;
+  backface-visibility: hidden;
+}
+
+/* Resting: collapsed — static folded (no animation restart / no data flash) */
+.agri-dashboard-indicator-drawer--collapsed
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot {
+  opacity: 0;
+  transform: translateX(-60%) scaleX(0.05);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+/* Resting: expanded — fully visible, no running animation */
+.agri-dashboard-indicator-drawer--expanded
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot {
+  opacity: 1;
+  transform: translateX(0) scaleX(1);
+  pointer-events: auto;
+  visibility: visible;
+}
+
+/* Transient expand — eco unfold keyframes + stagger */
+.agri-dashboard-indicator-drawer--expanding
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot {
+  visibility: visible;
+  pointer-events: auto;
+  animation: agriIndicatorUnfoldOut 0.34s cubic-bezier(0, 0.55, 0.45, 1) both;
+}
+
+.agri-dashboard-indicator-drawer--expanding
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot:nth-child(1) {
+  animation-delay: 0s;
+}
+.agri-dashboard-indicator-drawer--expanding
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot:nth-child(2) {
+  animation-delay: 0.13s;
+}
+.agri-dashboard-indicator-drawer--expanding
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot:nth-child(3) {
+  animation-delay: 0.26s;
+}
+.agri-dashboard-indicator-drawer--expanding
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot:nth-child(4) {
+  animation-delay: 0.39s;
+}
+
+/* Transient collapse — eco fold keyframes + reverse stagger */
+.agri-dashboard-indicator-drawer--collapsing
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot {
+  visibility: visible;
+  pointer-events: none;
+  animation: agriIndicatorFoldBack 0.3s cubic-bezier(0.55, 0, 1, 0.45) both;
+}
+
+.agri-dashboard-indicator-drawer--collapsing
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot:nth-child(4) {
+  animation-delay: 0s;
+}
+.agri-dashboard-indicator-drawer--collapsing
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot:nth-child(3) {
+  animation-delay: 0.13s;
+}
+.agri-dashboard-indicator-drawer--collapsing
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot:nth-child(2) {
+  animation-delay: 0.26s;
+}
+.agri-dashboard-indicator-drawer--collapsing
+  .agri-dashboard-indicator-panel
+  > .agri-dashboard-indicator-slot:nth-child(1) {
+  animation-delay: 0.39s;
+}
+
+@keyframes agriIndicatorUnfoldOut {
+  0% {
+    opacity: 0;
+    transform: translateX(-60%) scaleX(0.05);
+    transform-origin: left center;
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(2%) scaleX(1.04);
+    transform-origin: left center;
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scaleX(1);
+    transform-origin: left center;
+  }
+}
+
+@keyframes agriIndicatorFoldBack {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scaleX(1);
+    transform-origin: left center;
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(-4%) scaleX(0.6);
+    transform-origin: left center;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-60%) scaleX(0.05);
+    transform-origin: left center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agri-dashboard-indicator-toggle-icon {
+    transition: none;
+  }
+
+  .agri-dashboard-indicator-drawer--expanding
+    .agri-dashboard-indicator-panel
+    > .agri-dashboard-indicator-slot,
+  .agri-dashboard-indicator-drawer--collapsing
+    .agri-dashboard-indicator-panel
+    > .agri-dashboard-indicator-slot {
+    animation: none !important;
+  }
+
+  .agri-dashboard-indicator-drawer--collapsed
+    .agri-dashboard-indicator-panel
+    > .agri-dashboard-indicator-slot,
+  .agri-dashboard-indicator-drawer--collapsing
+    .agri-dashboard-indicator-panel
+    > .agri-dashboard-indicator-slot {
+    opacity: 0 !important;
+    transform: none !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .agri-dashboard-indicator-drawer--expanded
+    .agri-dashboard-indicator-panel
+    > .agri-dashboard-indicator-slot,
+  .agri-dashboard-indicator-drawer--expanding
+    .agri-dashboard-indicator-panel
+    > .agri-dashboard-indicator-slot {
+    opacity: 1 !important;
+    transform: none !important;
+    visibility: visible;
+  }
+}
+
+/* Top-right-of-map card: currently selected Graff chart date + index. */
+.agri-dashboard-date-index-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  width: var(--agri-dashboard-date-index-width);
+  height: var(--agri-dashboard-date-index-height);
+  max-width: var(--agri-dashboard-date-index-width);
+  min-width: var(--agri-dashboard-date-index-width);
+  min-height: var(--agri-dashboard-date-index-height);
+  max-height: var(--agri-dashboard-date-index-height);
+  z-index: 30;
+  pointer-events: auto;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.agri-dashboard-date-index-overlay:not(:has(.agri-date-index-card.has-selection)) {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Map-owned overlays stay anchored to the map when the dashboard is resized. */
+.agri-dashboard-map-slot > .agri-dashboard-indicator-drawer {
+  position: absolute !important;
+  top: var(--agri-dashboard-indicator-top) !important;
+  left: var(--agri-dashboard-indicator-left) !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+}
+
+.agri-dashboard-map-slot > .agri-dashboard-date-index-overlay {
+  /* Position is applied inline as fixed by applyDateIndexOverlayBounds. */
+  pointer-events: auto !important;
+}
+
+/* No further overrides needed here — the
+   .agri-dashboard-indicator-overlay--compact class (also applied to this
+   overlay in widget.tsx) supplies the same flat panel background, text
+   colors, and stat-label/stat-value sizing as the other 3 map indicators,
+   so this card matches them exactly instead of duplicating those rules. */
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget.map-overlay-mode,
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget {
+  --ind-bg: #1f2030;
+  --ind-bg-soft: #1f2030;
+  --ind-border: rgba(126, 214, 255, 0.16);
+  --ind-text: #e9f8ff;
+  --ind-muted: #9cc7dd;
+
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  padding: 6px 10px !important;
+  border-radius: 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  background: #1f2030 !important;
+  border: none !important;
+  box-shadow: none;
+  color: var(--ind-text) !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+html.light-theme
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget.map-overlay-mode,
+html.light-theme
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget,
+html[data-theme="light"]
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget.map-overlay-mode,
+html[data-theme="light"]
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget,
+body.light-theme
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget.map-overlay-mode,
+body.light-theme
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget,
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget.light-theme {
+  --ind-bg: #ffffff;
+  --ind-bg-soft: #ffffff;
+  --ind-border: rgba(61, 87, 85, 0.18);
+  --ind-text: #000000;
+  --ind-muted: #000000;
+
+  background: #ffffff !important;
+  border: none !important;
+  box-shadow: none;
+  color: #000000 !important;
+}
+
+html.light-theme
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget
+  .stat-label,
+html.light-theme
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget
+  .stat-value,
+html.light-theme
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget
+  .unit,
+html[data-theme="light"]
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget
+  .stat-label,
+html[data-theme="light"]
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget
+  .stat-value,
+html[data-theme="light"]
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget
+  .unit,
+body.light-theme
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget
+  .stat-label,
+body.light-theme
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget
+  .stat-value,
+body.light-theme
+  .agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget
+  .unit,
+.agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget.light-theme
+  .stat-label,
+.agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget.light-theme
+  .stat-value,
+.agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget.light-theme
+  .unit {
+  color: #000000 !important;
+}
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .widget-content,
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-main {
+  width: 100% !important;
+  height: auto !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  gap: 2px !important;
+  padding-left: 0 !important;
+}
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-label {
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+  margin-bottom: 0 !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.2px !important;
+  color: var(--ind-muted) !important;
+  text-align: center !important;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-value {
+  font-size: 18px !important;
+  line-height: 1.2 !important;
+  padding-bottom: 2px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.4px !important;
+  color: var(--ind-text) !important;
+  text-align: center !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .unit {
+  display: inline-block;
+  font-size: 18px !important;
+  line-height: 1.2 !important;
+  margin-left: 5px !important;
+  font-weight: 600 !important;
+  color: var(--ind-text) !important;
+  vertical-align: baseline;
+}
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .loading-indicator {
+  height: 100% !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+}
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .loading-dot {
+  width: 5px;
+  height: 5px;
+  margin: 0 2px;
+}
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .error-container {
+  padding: 0 !important;
+  width: 100%;
+  max-width: 100%;
+  text-align: left !important;
+  overflow: hidden;
+}
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .error-container p {
+  margin: 0;
+  font-size: 9px !important;
+  line-height: 1.15 !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .error-icon {
+  font-size: 11px !important;
+  margin-bottom: 2px !important;
+}
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .retry-button {
+  display: none;
+}
+
+.agri-dashboard-indicator-overlay .vegetation-stats-widget {
+  border-radius: var(--agri-widget-radius) !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .group-caption {
+  display: none !important;
+}
+
+.agri-dashboard-managed-indicator {
+  right: auto !important;
+}
+
+html.light-theme .agri-dashboard-indicator-toggle,
+html[data-theme="light"] .agri-dashboard-indicator-toggle,
+body.light-theme .agri-dashboard-indicator-toggle {
+  background: linear-gradient(165deg, #ffffff 0%, #eef4fb 100%);
+  border: none;
+  color: #0f172a;
+  box-shadow: none;
+}
+
+html.light-theme .agri-dashboard-indicator-toggle:hover,
+html[data-theme="light"] .agri-dashboard-indicator-toggle:hover,
+body.light-theme .agri-dashboard-indicator-toggle:hover {
+  background: linear-gradient(165deg, #ffffff 0%, #e7eef8 100%);
+}
+
+.agri-dashboard-agri-host {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 35;
+}
+
+.agri-dashboard-agri-host .agri3-attr-card {
+  width: 0;
+  height: 0;
+  overflow: visible;
+}
+
+.agri-dashboard-agri-host .agri3-popup-direct {
+  pointer-events: auto;
+  width: var(--agri-dashboard-popup-width, 340px) !important;
+  min-width: var(--agri-dashboard-popup-width, 340px) !important;
+  max-width: var(--agri-dashboard-popup-width, 340px) !important;
+  max-height: none !important;
+  overflow: hidden;
+  border-radius: 20px !important;
+  outline: none !important;
+  box-shadow: none !important;
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+
+.agri-dashboard-agri-host .agri3-popup-direct:focus,
+.agri-dashboard-agri-host .agri3-popup-direct:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.agri-dashboard-agri-host .agri3-popup-direct.is-pinned {
+  border-radius: 20px !important;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.agri-dashboard-agri-host .agri3-popup-direct.is-pinned .agri3-popup-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior-y: contain;
+  border-radius: 0 0 20px 20px;
+}
+
+.agri3-popup-direct.is-pinned .agri3-chart-panel {
+  border-radius: 0 0 20px 20px;
+  margin-bottom: 0;
+}
+
+.agri-dashboard-managed-map {
+  border-radius: var(--agri-widget-radius) !important;
+  overflow: hidden !important;
+}
+
+.agri-dashboard-managed-map-renderer,
+.agri-dashboard-managed-map .widget-renderer,
+.agri-dashboard-managed-map .layout-item-content {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  pointer-events: auto;
+  border-radius: var(--agri-widget-radius);
+  overflow: hidden;
+}
+
+.agri-dashboard-managed-map .esri-view,
+.agri-dashboard-managed-map .esri-view-root,
+.agri-dashboard-managed-map .widget-map {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: var(--agri-widget-radius);
+}
+
+/* Child widget fill — uniform 12px corners */
+.agri-dashboard-v3 .evapo-region-card,
+.agri-dashboard-v3 .agri-v11-regional-stats-card,
+.agri-dashboard-v3 .land-category-card,
+.agri-dashboard-v3 .kadastr-status-card,
+.agri-dashboard-v3 .construction-years-card,
+.agri-dashboard-v3 .vegetation-stats-widget,
+.agri-dashboard-v3 .agri-pie-card,
+.agri-dashboard-v3 .agri-graff-card,
+.agri-dashboard-v3 .agri-bar-card {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: var(--agri-widget-radius) !important;
+  overflow: hidden !important;
+}
+
+.agri-dashboard-v3 .agri-dashboard-widget-slot > .widget-content,
+.agri-dashboard-v3 .agri-dashboard-widget-slot > .widget-renderer,
+.agri-dashboard-v3 .agri-dashboard-widget-slot > .widget-inner-content {
+  border-radius: var(--agri-widget-radius) !important;
+  overflow: hidden !important;
+}
+
+/* Widget panels use #1f2030; dashboard shell/body stays black */
+.agri-dashboard-v3 .evapo-region-card.dark-theme,
+.agri-dashboard-v3 .agri-v11-regional-stats-card.agri-v11-region-dark,
+.agri-dashboard-v3 .land-category-card.dark-theme,
+.agri-dashboard-v3 .kadastr-status-card.dark-theme,
+.agri-dashboard-v3 .construction-years-card.dark-theme,
+html[data-theme="dark"] .agri-dashboard-v3 .land-category-card:not(.light-theme),
+body:not(.light-theme) .agri-dashboard-v3 .land-category-card.dark-theme {
+  --loc-bg: var(--agri-widget-panel-bg);
+  --loc-bg-soft: var(--agri-widget-panel-bg);
+  --region-bg: var(--agri-widget-panel-bg);
+  --region-bg-soft: var(--agri-widget-panel-bg);
+  --pie-bg: var(--agri-widget-panel-bg);
+  --pie-bg-soft: var(--agri-widget-panel-bg);
+  --graff-bg: var(--agri-widget-panel-bg);
+  --graff-bg-soft: var(--agri-widget-panel-bg);
+  --bar-bg: var(--agri-widget-panel-bg);
+  --bar-bg-soft: var(--agri-widget-panel-bg);
+
+  background: #1f2030 !important;
+}
+
+.agri-dashboard-header .evapo-region-card {
+  border-radius: var(--agri-widget-radius) !important;
+  overflow: hidden !important;
+}
+
+.agri-dashboard-v3 .evapo-region-card.dark-theme::before,
+.agri-dashboard-v3 .evapo-region-card.dark-theme::after {
+  content: none !important;
+  display: none !important;
+}
+
+html.agri-dashboard-active,
+html.agri-dashboard-active body,
+html.agri-dashboard-active.evapo-app-bg-dark,
+html.agri-dashboard-active.evapo-app-bg-dark body {
+  background-color: #0a101a !important;
+}
+
+html.agri-dashboard-active.light-theme,
+html.agri-dashboard-active[data-theme="light"],
+html.agri-dashboard-active.light-theme body,
+html.agri-dashboard-active[data-theme="light"] body,
+html.agri-dashboard-active body.light-theme,
+html.agri-dashboard-active.evapo-app-bg-light,
+html.agri-dashboard-active.evapo-app-bg-light body,
+html.agri-dashboard-active body.evapo-app-bg-light {
+  background-color: #eff6ff !important;
+}
+
+@media (max-width: 1100px) {
+  .agri-dashboard-top-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+
+/* iPad Pro (+ short windows ≤910px height in same width band) */
+@media (min-width: 1080px) and (max-width: 1400px) and (min-height: 780px) and (max-aspect-ratio: 3/2),
+  (min-width: 1080px) and (max-width: 1400px) and (max-height: 910px) and (min-height: 500px) {
+  html.agri-dashboard-active,
+  .agri-dashboard-v3,
+  .agri-dashboard-indicator-drawer {
+    --agri-dashboard-popup-width: 280px;
+    --agri-dashboard-date-index-width: 140px;
+    --agri-dashboard-date-index-height: 68px;
+    --agri-dashboard-indicator-toggle-width: 40px;
+    --agri-dashboard-indicator-slot-width: 140px;
+    --agri-dashboard-indicator-panel-width: 584px;
+    --agri-dashboard-indicator-height: 60px;
+    --agri-dashboard-indicator-drawer-width: 632px;
+  }
+
+  .agri-dashboard-top-row {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.55fr) minmax(0, 1fr);
+  }
+
+  .agri-dashboard-bottom-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  }
+
+  /* When polygon popup is pinned on iPad, keep top KPI row clear of popup area. */
+  .agri-dashboard-v3.agri-popup-pinned,
+  html.agri-dashboard-active.agri-popup-pinned {
+    --agri-dashboard-indicator-slot-width: 128px;
+    --agri-dashboard-indicator-panel-width: 536px;
+    --agri-dashboard-indicator-drawer-width: 584px;
+    --agri-dashboard-date-index-right: 304px;
+  }
+
+  .agri-dashboard-v3.agri-popup-pinned .agri-dashboard-agri-host .agri3-popup-direct,
+  html.agri-dashboard-active.agri-popup-pinned .agri-dashboard-agri-host .agri3-popup-direct {
+    max-height: calc(100vh - 210px) !important;
+  }
+
+  .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-main {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    justify-content: flex-start !important;
+    gap: 2px !important;
+    padding: 3px 4px 5px !important;
+  }
+
+  .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-label {
+    font-size: 10px !important;
+    line-height: 1.15 !important;
+    white-space: normal !important;
+    display: -webkit-box !important;
+    -webkit-box-orient: vertical !important;
+    -webkit-line-clamp: 2 !important;
+    line-clamp: 2 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100%;
+  }
+
+  .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-value,
+  .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .unit {
+    font-size: 13px !important;
+    margin-top: auto !important;
+    padding-bottom: 0 !important;
+  }
+
+  .agri-dashboard-date-index-overlay .agri-date-index-card .stat-value {
+    font-size: 16px !important;
+  }
+
+  .agri-dashboard-date-index-overlay .agri-date-index-key,
+  .agri-dashboard-date-index-overlay .agri-date-index-date {
+    font-size: 9px;
+  }
+
+  .agri-dashboard-date-index-overlay .agri-date-index-meta {
+    margin-bottom: 8px;
+  }
+
+  .agri-dashboard-date-index-overlay .agri-date-index-accent {
+    height: 22px;
+  }
+
+  /* iPad Pro: narrower search, truly centered in header */
+  .agri-dashboard-header .evapo-region-content {
+    padding: 0 12px !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  .agri-dashboard-header .agri-v20-main-layout {
+    width: 100%;
+    height: 100%;
+    justify-content: center !important;
+  }
+
+  .agri-dashboard-header .agri-v20-header-row {
+    position: relative !important;
+    align-items: center !important;
+    min-height: 100%;
+    height: 100%;
+  }
+
+  /* Brand + toolbar sit on the same vertical center as the search pill */
+  .agri-dashboard-header .agri-v20-brand,
+  .agri-dashboard-header .agri-v20-toolbar-group {
+    align-self: center !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    transform: translateY(-2px);
+  }
+
+  .agri-dashboard-header .agri-v20-brand {
+    align-items: center !important;
+    gap: 10px !important;
+  }
+
+  .agri-dashboard-header .agri-v20-brand-logo {
+    height: 58px !important;
+    width: auto !important;
+    max-width: 86px !important;
+    object-fit: contain !important;
+  }
+
+  .agri-dashboard-header .agri-v20-brand-title {
+    font-size: 18px !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .agri-dashboard-header .agri-v20-toolbar-group {
+    align-items: center !important;
+    gap: 16px !important;
+    min-height: 0 !important;
+  }
+
+  .agri-dashboard-header .agri-v20-toolbar-item {
+    align-self: center !important;
+    min-height: 0 !important;
+  }
+
+  .agri-dashboard-header .agri-v20-theme-toggle {
+    --agri-theme-toggle-height: 32px;
+    align-self: center !important;
+  }
+
+  .agri-dashboard-header .agri-v20-graff-search-wrap {
+    position: absolute !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: min(340px, 36vw) !important;
+    max-width: 340px !important;
+    min-width: 220px !important;
+    grid-column: auto !important;
+    justify-self: center !important;
+    z-index: 5;
+  }
+
+  .agri-dashboard-header .agri-v20-graff-search-input {
+    height: 40px !important;
+    font-size: 13px !important;
+  }
+
+  /* Suggestions follow the narrower search field width (portal uses wrap rect). */
+  .agri-v20-floating-overlay.agri-v20-graff-search-suggestions {
+    max-width: min(340px, 36vw) !important;
+  }
+
+  /* Header toolbar modals: language / year / index info / profile — compact */
+  .agri-v20-floating-overlay.agri-v20-toolbar-popover {
+    padding: 5px !important;
+    border-radius: 12px !important;
+    gap: 4px !important;
+  }
+
+  .agri-v20-floating-overlay.agri-v20-compact-popover {
+    min-width: 132px !important;
+  }
+
+  .agri-v20-floating-overlay.agri-v20-yil-popover {
+    min-width: 120px !important;
+  }
+
+  .agri-v20-floating-overlay.agri-v20-index-info-popover {
+    width: 236px !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+
+  .agri-v20-option-menu,
+  .agri-v20-compact-option-menu,
+  .agri-v20-yil-option-menu {
+    min-width: 0 !important;
+    gap: 3px !important;
+  }
+
+  .agri-v20-option-item,
+  .agri-v20-language-option,
+  .agri-v20-compact-option-item,
+  .agri-v20-yil-option-item {
+    font-size: 12px !important;
+    padding: 7px 9px !important;
+    border-radius: 8px !important;
+  }
+
+  .agri-v20-index-info-menu {
+    min-width: 0 !important;
+    gap: 4px !important;
+    padding: 2px !important;
+  }
+
+  .agri-v20-index-info-header {
+    padding: 4px 8px 6px !important;
+    font-size: 11px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .agri-v20-index-info-row {
+    padding: 7px 9px !important;
+    border-radius: 9px !important;
+    gap: 6px !important;
+  }
+
+  .agri-v20-index-info-dot {
+    width: 7px !important;
+    height: 7px !important;
+    margin-top: 3px !important;
+  }
+
+  .agri-v20-index-info-name {
+    font-size: 11px !important;
+  }
+
+  .agri-v20-index-info-desc {
+    font-size: 10px !important;
+    line-height: 1.3 !important;
+    margin-top: 1px !important;
+  }
+
+  .agri-v20-index-info-detail-card {
+    max-width: 400px !important;
+    max-height: min(520px, calc(100vh - 40px)) !important;
+    padding: 14px !important;
+    border-radius: 14px !important;
+    gap: 10px !important;
+  }
+
+  .agri-v20-index-info-detail-title {
+    font-size: 18px !important;
+  }
+
+  .agri-v20-index-info-detail-summary,
+  .agri-v20-index-info-detail-text {
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+  }
+
+  .agri-v20-index-info-detail-formula {
+    font-size: 12px !important;
+    padding: 8px 10px !important;
+  }
+
+  .agri-v20-index-info-detail-icon,
+  .agri-v20-index-info-detail-close-btn {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .agri-v20-profile-dropdown {
+    min-width: 160px !important;
+    padding: 4px !important;
+    border-radius: 10px !important;
+  }
+
+  .agri-v20-profile-header {
+    padding: 8px 10px 6px !important;
+  }
+
+  .agri-v20-profile-name {
+    font-size: 12px !important;
+  }
+
+  .agri-v20-profile-logout-item {
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+    gap: 8px !important;
+  }
+
+  .agri-v20-profile-logout-item .agri-logout-svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  /* Ensure pie legend stays hidden even if AgriPie CSS order loses. */
+  .agri-dashboard-v3 .land-category-card .category-legend {
+    display: none !important;
+  }
+
+  .agri-dashboard-v3 .land-category-card .land-category-chart-container {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  .agri-dashboard-v3 .land-category-card .land-category-echart {
+    width: min(100%, 100cqh) !important;
+    height: min(100%, 100cqw) !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+  }
+
+  .agri-dashboard-v3 .land-category-card .land-category-main-content {
+    justify-content: center !important;
+  }
+
+  /* iPad: compact map controls + basemap menu (not too tiny) */
+  .agri-dashboard-map-controls {
+    gap: 7px;
+    left: 8px;
+  }
+
+  .agri-dashboard-basemap-control {
+    top: calc(10px + 42px + 30px);
+    left: 8px;
+  }
+
+  .agri-dashboard-fullscreen-button {
+    left: 8px;
+    bottom: 8px;
+  }
+
+  .agri-dashboard-map-zoom-button,
+  .agri-dashboard-basemap-button,
+  .agri-dashboard-fullscreen-button {
+    width: 42px;
+    height: 42px;
+  }
+
+  .agri-dashboard-map-control-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .agri-dashboard-basemap-menu {
+    left: 54px;
+    width: 158px;
+    padding: 7px;
+    border-radius: 13px;
+  }
+
+  .agri-dashboard-basemap-menu-title {
+    padding: 4px 6px 7px;
+    font-size: 12px;
+  }
+
+  .agri-dashboard-basemap-option {
+    min-height: 32px;
+    margin: 0 0 4px;
+    padding: 6px 9px;
+    border-radius: 8px;
+    font-size: 12px;
+  }
+
+  .agri-dashboard-basemap-borders-row {
+    padding: 6px 8px 3px;
+  }
+
+  .agri-dashboard-basemap-borders-label {
+    font-size: 12px;
+  }
+
+  .agri-dashboard-basemap-borders-toggle {
+    width: 38px;
+    height: 22px;
+  }
+
+  .agri-dashboard-basemap-borders-thumb {
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .agri-dashboard-basemap-borders-toggle.is-on .agri-dashboard-basemap-borders-thumb {
+    transform: translateX(16px);
+  }
+
+  .agri-dashboard-v3 .agri-v11-regional-stats-card .agri-v11-regional-stats-header-title,
+  .agri-dashboard-v3 .land-category-card .land-category-title,
+  .agri-dashboard-v3 .kadastr-status-card .graff-index-top-label,
+  .agri-dashboard-v3 .construction-years-card .construction-years-header-title,
+  html.light-theme .agri-dashboard-v3 .agri-v11-regional-stats-card .agri-v11-regional-stats-header-title,
+  html.light-theme .agri-dashboard-v3 .land-category-card .land-category-title,
+  html.light-theme .agri-dashboard-v3 .kadastr-status-card .graff-index-top-label,
+  html.light-theme .agri-dashboard-v3 .construction-years-card .construction-years-header-title,
+  html[data-theme="light"] .agri-dashboard-v3 .agri-v11-regional-stats-card .agri-v11-regional-stats-header-title,
+  html[data-theme="light"] .agri-dashboard-v3 .land-category-card .land-category-title,
+  html[data-theme="light"] .agri-dashboard-v3 .kadastr-status-card .graff-index-top-label,
+  html[data-theme="light"] .agri-dashboard-v3 .construction-years-card .construction-years-header-title,
+  body.light-theme .agri-dashboard-v3 .agri-v11-regional-stats-card .agri-v11-regional-stats-header-title,
+  body.light-theme .agri-dashboard-v3 .land-category-card .land-category-title,
+  body.light-theme .agri-dashboard-v3 .kadastr-status-card .graff-index-top-label,
+  body.light-theme .agri-dashboard-v3 .construction-years-card .construction-years-header-title {
+    font-size: 11px !important;
+  }
+
+  /* Vegetatsiya Holati: smaller value + category labels in chart */
+  .agri-dashboard-v3 .construction-years-card .agri-status-root {
+    --value: 11px;
+    --label: 11px;
+  }
+
+  .agri-dashboard-v3 .construction-years-card .agri-status-value,
+  .agri-dashboard-v3 .construction-years-card .agri-status-value-num {
+    font-size: 11px !important;
+  }
+
+  .agri-dashboard-v3 .construction-years-card .agri-status-label {
+    font-size: 11px !important;
+  }
+
+  .agri-dashboard-v3 .construction-years-card .agri-status-root--no-region {
+    --value: 9px;
+  }
+
+  .agri-dashboard-v3 .construction-years-card .agri-status-root--no-region .agri-status-value,
+  .agri-dashboard-v3 .construction-years-card .agri-status-root--no-region .agri-status-value-num {
+    font-size: 9px !important;
+  }
+
+  /* Compact chart loaders on iPad / short windows */
+  .agri-dashboard-v3 .agri-chart-loader,
+  .agri-dashboard-map-loading-overlay .agri-chart-loader {
+    --chart-loader-scale: 0.65;
+  }
+}
+
+/* iPad Air-like compact profile (e.g. 1180x820) + short windows ≤910px */
+@media (min-width: 1080px) and (max-width: 1220px) and (min-height: 760px) and (max-aspect-ratio: 3/2),
+  (min-width: 1080px) and (max-width: 1220px) and (max-height: 910px) and (min-height: 500px) {
+  .agri-dashboard-v3 {
+    --agri-dashboard-gap: 7px;
+    --agri-dashboard-edge: 7px;
+    --agri-dashboard-header-height: 54px;
+    --agri-widget-radius: 16px;
+    --agri-dashboard-popup-width: 260px;
+    --agri-dashboard-date-index-width: 128px;
+    --agri-dashboard-date-index-height: 62px;
+  }
+
+  html.agri-dashboard-active,
+  .agri-dashboard-indicator-drawer {
+    --agri-dashboard-popup-width: 260px;
+    --agri-dashboard-date-index-width: 128px;
+    --agri-dashboard-date-index-height: 62px;
+    --agri-dashboard-indicator-toggle-width: 36px;
+    --agri-dashboard-indicator-slot-width: 128px;
+    --agri-dashboard-indicator-panel-width: 536px;
+    --agri-dashboard-indicator-height: 56px;
+    --agri-dashboard-indicator-drawer-width: 580px;
+  }
+
+  .agri-dashboard-v3.agri-popup-pinned,
+  html.agri-dashboard-active.agri-popup-pinned {
+    --agri-dashboard-date-index-right: 284px;
+  }
+
+  .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-main {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    justify-content: flex-start !important;
+    gap: 2px !important;
+    padding: 2px 3px 4px !important;
+  }
+
+  .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-label {
+    font-size: 9px !important;
+    line-height: 1.15 !important;
+    white-space: normal !important;
+    display: -webkit-box !important;
+    -webkit-box-orient: vertical !important;
+    -webkit-line-clamp: 2 !important;
+    line-clamp: 2 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-value,
+  .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .unit {
+    font-size: 12px !important;
+    margin-top: auto !important;
+    padding-bottom: 0 !important;
+  }
+
+  .agri-dashboard-date-index-overlay .agri-date-index-card .stat-value {
+    font-size: 14px !important;
+  }
+
+  .agri-dashboard-map-zoom-button {
+    width: 42px;
+    height: 42px;
+  }
+
+  .agri-dashboard-map-control-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .agri-dashboard-basemap-button,
+  .agri-dashboard-fullscreen-button {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+/* 2K+: narrower Viloyatlar / Ekin Turi (sides − relative 1fr vs center) */
+@media (min-width: 1921px) and (min-height: 1081px) {
+  .agri-dashboard-v3 {
+    --agri-dashboard-top-fr: 70;
+    --agri-dashboard-bottom-fr: 30;
+  }
+
+  /* Map + Viloyatlar taller; Ekin Turi / Jadval / Vegetatsiya shorter */
+  .agri-dashboard-body {
+    grid-template-rows: minmax(0, 70fr) minmax(220px, 30fr) !important;
+  }
+
+  .agri-dashboard-top-row,
+  .agri-dashboard-bottom-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1fr);
+  }
+
+  .agri-dashboard-indicator-drawer {
+    --agri-dashboard-indicator-height: 88px;
+    --agri-dashboard-indicator-slot-width: 196px;
+    --agri-dashboard-indicator-panel-width: 808px;
+    --agri-dashboard-indicator-drawer-width: 862px;
+  }
+
+  .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-label {
+    font-size: 14px !important;
+  }
+
+  .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-value,
+  .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .unit {
+    font-size: 22px !important;
+  }
+
+  /* Pie legend labels + values: force 14px (beats 11/12px locks) */
+  .agri-dashboard-v3 .land-category-card .category-legend .legend-label,
+  .agri-dashboard-v3 .land-category-card.light-theme .category-legend .legend-label,
+  .agri-dashboard-v3 .land-category-card.dark-theme .category-legend .legend-label,
+  .agri-dashboard-v3 .legend-label,
+  html.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-label,
+  html[data-theme="light"] .agri-dashboard-v3 .land-category-card.light-theme .legend-label,
+  body.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-label,
+  .agri-dashboard-v3 .land-category-card .category-legend .legend-area-value,
+  .agri-dashboard-v3 .land-category-card .category-legend .legend-value,
+  .agri-dashboard-v3 .legend-area-value,
+  .agri-dashboard-v3 .legend-percent-value {
+    font-size: 14px !important;
+    line-height: 1.3 !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .agri-dashboard-v3 {
+    overflow: auto;
+    pointer-events: auto;
+    padding: var(--agri-dashboard-edge);
+  }
+
+  .agri-dashboard-header,
+  .agri-dashboard-body {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: 100%;
+  }
+
+  .agri-dashboard-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--agri-dashboard-gap);
+  }
+
+  .agri-dashboard-top-row {
+    display: flex;
+    flex-direction: column;
+    min-height: 320px;
+  }
+
+  .agri-dashboard-map-slot {
+    min-height: 280px;
+  }
+
+  .agri-dashboard-left-panel {
+    min-height: 280px;
+  }
+
+  .agri-dashboard-bottom-row {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(260px, 1fr) minmax(300px, 1.2fr) minmax(260px, 1fr);
+  }
+
+  .agri-dashboard-header {
+    height: var(--agri-dashboard-header-height);
+    margin-bottom: var(--agri-dashboard-gap);
+  }
+}
+
+@media (max-width: 640px) {
+  .agri-dashboard-bottom-row {
+    grid-template-rows: minmax(240px, 1fr) minmax(280px, 1.2fr) minmax(240px, 1fr);
+  }
+}
+
+@media (max-height: 720px) and (min-width: 861px) {
+  .agri-dashboard-body {
+    grid-template-rows: minmax(0, 1fr) minmax(200px, 34%);
+  }
+}
+
+.agri-dashboard-indicator-slot .vegetation-stats-widget,
+.agri-dashboard-indicator-slot .vegetation-stats-widget.map-overlay-mode {
+  border-radius: 20px !important;
+  overflow: hidden !important;
+}
+
+.agri-dashboard-indicator-overlay .vegetation-stats-widget,
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget {
+  border-radius: 20px !important;
+  overflow: hidden !important;
+}
+
+/* Day mode: black chart labels and legend values */
+html.light-theme .agri-dashboard-v3 .agri-v11-regional-stats-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text,
+html[data-theme="light"] .agri-dashboard-v3 .agri-v11-regional-stats-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text,
+body.light-theme .agri-dashboard-v3 .agri-v11-regional-stats-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text,
+html.light-theme .agri-dashboard-v3 .agri-v11-regional-stats-card.light-theme .recharts-label-list text,
+html[data-theme="light"] .agri-dashboard-v3 .agri-v11-regional-stats-card.light-theme .recharts-label-list text,
+body.light-theme .agri-dashboard-v3 .agri-v11-regional-stats-card.light-theme .recharts-label-list text,
+html.light-theme .agri-dashboard-v3 .construction-years-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text,
+html[data-theme="light"] .agri-dashboard-v3 .construction-years-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text,
+body.light-theme .agri-dashboard-v3 .construction-years-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text,
+html.light-theme .agri-dashboard-v3 .construction-years-card.light-theme .recharts-label-list text,
+html[data-theme="light"] .agri-dashboard-v3 .construction-years-card.light-theme .recharts-label-list text,
+body.light-theme .agri-dashboard-v3 .construction-years-card.light-theme .recharts-label-list text,
+html.light-theme .agri-dashboard-v3 .construction-years-card.light-theme .recharts-label-content,
+html[data-theme="light"] .agri-dashboard-v3 .construction-years-card.light-theme .recharts-label-content,
+body.light-theme .agri-dashboard-v3 .construction-years-card.light-theme .recharts-label-content,
+html.light-theme .agri-dashboard-v3 .construction-years-card.light-theme text.agri-bar-value-label,
+html[data-theme="light"] .agri-dashboard-v3 .construction-years-card.light-theme text.agri-bar-value-label,
+body.light-theme .agri-dashboard-v3 .construction-years-card.light-theme text.agri-bar-value-label,
+.agri-dashboard-v3 .construction-years-card.light-theme .recharts-label-list text,
+.agri-dashboard-v3 .construction-years-card.light-theme .recharts-label-content,
+.agri-dashboard-v3 .construction-years-card.light-theme text.recharts-label,
+.agri-dashboard-v3 .construction-years-card.light-theme .recharts-text.recharts-label,
+.agri-dashboard-v3 .construction-years-card.light-theme text.agri-bar-value-label {
+  fill: #000000 !important;
+  color: #000000 !important;
+  stroke: none !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+  fill-opacity: 1 !important;
+}
+
+html.dark-theme .agri-dashboard-v3 .construction-years-card .recharts-label-list text,
+html[data-theme="dark"] .agri-dashboard-v3 .construction-years-card .recharts-label-list text,
+body.dark-theme .agri-dashboard-v3 .construction-years-card .recharts-label-list text,
+html.dark-theme .agri-dashboard-v3 .construction-years-card .recharts-label-content,
+html[data-theme="dark"] .agri-dashboard-v3 .construction-years-card .recharts-label-content,
+body.dark-theme .agri-dashboard-v3 .construction-years-card .recharts-label-content,
+html.dark-theme .agri-dashboard-v3 .construction-years-card text.agri-bar-value-label,
+html[data-theme="dark"] .agri-dashboard-v3 .construction-years-card text.agri-bar-value-label,
+body.dark-theme .agri-dashboard-v3 .construction-years-card text.agri-bar-value-label,
+.agri-dashboard-v3 .construction-years-card.dark-theme .recharts-label-list text,
+.agri-dashboard-v3 .construction-years-card.dark-theme .recharts-label-content,
+.agri-dashboard-v3 .construction-years-card.dark-theme text.recharts-label,
+.agri-dashboard-v3 .construction-years-card.dark-theme .recharts-text.recharts-label,
+.agri-dashboard-v3 .construction-years-card.dark-theme text.agri-bar-value-label {
+  fill: #ffffff !important;
+  color: #ffffff !important;
+  stroke: none !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+  fill-opacity: 1 !important;
+}
+
+html.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-label,
+html[data-theme="light"] .agri-dashboard-v3 .land-category-card.light-theme .legend-label,
+body.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-label,
+html.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-value,
+html[data-theme="light"] .agri-dashboard-v3 .land-category-card.light-theme .legend-value,
+body.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-value,
+html.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-percent-value,
+html[data-theme="light"] .agri-dashboard-v3 .land-category-card.light-theme .legend-percent-value,
+body.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-percent-value,
+html.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-area-value,
+html[data-theme="light"] .agri-dashboard-v3 .land-category-card.light-theme .legend-area-value,
+body.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-area-value,
+html.light-theme .agri-dashboard-v3 .land-category-card.light-theme .land-category-title,
+html[data-theme="light"] .agri-dashboard-v3 .land-category-card.light-theme .land-category-title,
+body.light-theme .agri-dashboard-v3 .land-category-card.light-theme .land-category-title,
+html.light-theme .agri-dashboard-v3 .kadastr-status-card.light-theme .graff-index-top-label,
+html[data-theme="light"] .agri-dashboard-v3 .kadastr-status-card.light-theme .graff-index-top-label,
+body.light-theme .agri-dashboard-v3 .kadastr-status-card.light-theme .graff-index-top-label {
+  color: #000000 !important;
+}
+
+html.light-theme .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-label,
+html.light-theme .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-value,
+html.light-theme .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .unit,
+html[data-theme="light"] .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-label,
+html[data-theme="light"] .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-value,
+html[data-theme="light"] .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .unit,
+body.light-theme .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-label,
+body.light-theme .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .stat-value,
+body.light-theme .agri-dashboard-indicator-overlay--compact .vegetation-stats-widget .unit {
+  color: #000000 !important;
+}
+
+/* Widget cards — no outer border line */
+.agri-dashboard-v3 .evapo-region-card,
+.agri-dashboard-header .evapo-region-card,
+.agri-dashboard-v3 .agri-v11-regional-stats-card,
+.agri-dashboard-v3 .land-category-card,
+.agri-dashboard-v3 .kadastr-status-card,
+.agri-dashboard-v3 .construction-years-card,
+.agri-dashboard-indicator-overlay .vegetation-stats-widget,
+.agri-dashboard-indicator-overlay--compact .vegetation-stats-widget {
+  border: none !important;
+  border-color: transparent !important;
+}
+
+/* ===== Ekin Turi refined panel ===== */
+.agri-dashboard-v3 .land-category-card {
+  --ekin-bg: #1f2030;
+  --ekin-border: rgba(148, 163, 184, 0.16);
+  --ekin-divider: rgba(148, 163, 184, 0.12);
+  --ekin-text: #f1f5f9;
+  --ekin-muted: #9caec2;
+  --ekin-hover: rgba(255, 255, 255, 0.055);
+  --ekin-selected: rgba(255, 255, 255, 0.085);
+  --ekin-shadow: none;
+
+  position: relative !important;
+  container: ekin-panel / inline-size !important;
+  isolation: isolate !important;
+  overflow: hidden !important;
+  color: var(--ekin-text) !important;
+  background: var(--ekin-bg) !important;
+  border: none !important;
+  border-radius: var(--agri-widget-radius, 12px) !important;
+  box-shadow: none;
+}
+
+html.light-theme .agri-dashboard-v3 .land-category-card.light-theme,
+html[data-theme="light"] .agri-dashboard-v3 .land-category-card.light-theme,
+body.light-theme .agri-dashboard-v3 .land-category-card.light-theme {
+  --ekin-bg: #ffffff;
+  --ekin-border: rgba(15, 23, 42, 0.11);
+  --ekin-divider: rgba(15, 23, 42, 0.09);
+  --ekin-text: #172033;
+  --ekin-muted: #64748b;
+  --ekin-hover: rgba(15, 23, 42, 0.04);
+  --ekin-selected: rgba(15, 23, 42, 0.065);
+  --ekin-shadow: none;
+}
+
+.agri-dashboard-v3 .land-category-card::before,
+.agri-dashboard-v3 .land-category-card::after {
+  content: none !important;
+  display: none !important;
+}
+
+.agri-dashboard-v3 .land-category-content {
+  position: relative !important;
+  z-index: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  gap: 10px !important;
+  padding: 15px 16px 13px !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.agri-dashboard-v3 .land-category-header {
+  flex: 0 0 auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  min-width: 0 !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.agri-dashboard-v3 .land-category-title-wrap {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* Panel titles — same size/weight across Region / Ekin / Index / VH */
+.agri-dashboard-v3 .agri-v11-regional-stats-header-title,
+.agri-dashboard-v3 .land-category-title,
+.agri-dashboard-v3 .graff-index-top-label,
+.agri-dashboard-v3 .construction-years-header-title {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+  line-height: 1.25 !important;
+}
+
+.agri-dashboard-v3 .land-category-title {
+  display: block !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  color: var(--ekin-text) !important;
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.agri-dashboard-v3 .land-category-title::after {
+  content: none !important;
+  display: none !important;
+}
+
+.agri-dashboard-v3 .land-category-main-content {
+  flex: 1 1 auto !important;
+  display: grid !important;
+  grid-template-columns: minmax(184px, 52%) minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  gap: 6px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.agri-dashboard-v3 .land-category-chart-container {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  align-self: stretch !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  isolation: isolate !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.agri-dashboard-v3 .land-category-chart-container::before,
+.agri-dashboard-v3 .land-category-chart-container::after {
+  content: none !important;
+  display: none !important;
+}
+
+.agri-dashboard-v3 .land-category-echart {
+  position: relative !important;
+  z-index: 1 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 150px !important;
+}
+
+.agri-dashboard-v3 .category-legend {
+  display: flex !important;
+  flex-direction: column !important;
+  align-self: stretch !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  max-height: 100% !important;
+  gap: 8px !important;
+  padding: 1px 3px 1px 0 !important;
+  margin: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  isolation: isolate !important;
+  z-index: 2 !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(148, 163, 184, 0.38) transparent !important;
+}
+
+.agri-dashboard-v3 .land-category-card--ipad .category-legend {
+  display: none !important;
+}
+
+.agri-dashboard-v3 .land-category-card--ipad .land-category-chart-container {
+  flex: 1 1 100% !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+.agri-dashboard-v3 .land-category-card--ipad .land-category-echart {
+  width: min(100%, 100cqh) !important;
+  height: min(100%, 100cqw) !important;
+}
+
+.agri-dashboard-v3 .legend-item {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: 10px minmax(0, 1fr) max-content !important;
+  grid-template-rows: auto auto !important;
+  align-items: center !important;
+  column-gap: 6px !important;
+  row-gap: 3px !important;
+  min-width: 0 !important;
+  min-height: 43px !important;
+  padding: 5px 6px !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--ekin-divider) !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transform: none !important;
+  transition: background-color 160ms ease !important;
+}
+
+.agri-dashboard-v3 .legend-item:last-child {
+  border-bottom-color: transparent !important;
+}
+
+.agri-dashboard-v3 .legend-item::before {
+  content: none !important;
+  display: none !important;
+}
+
+.agri-dashboard-v3 .legend-item:hover {
+  background: var(--ekin-hover) !important;
+  transform: none !important;
+}
+
+.agri-dashboard-v3 .legend-item-selected,
+.agri-dashboard-v3 .legend-item-selected:hover {
+  background: var(--ekin-selected) !important;
+  box-shadow: none;
+}
+
+.agri-dashboard-v3 .legend-color {
+  grid-column: 1 !important;
+  grid-row: 1 / span 2 !important;
+  align-self: center !important;
+  width: 9px !important;
+  height: 9px !important;
+  min-width: 9px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  box-sizing: border-box !important;
+  box-shadow: none;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease !important;
+}
+
+.agri-dashboard-v3 .legend-item:hover .legend-color,
+.agri-dashboard-v3 .legend-item-selected .legend-color {
+  transform: scale(1.08) !important;
+  box-shadow: none;
+}
+
+.agri-dashboard-v3 .legend-label {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  color: var(--ekin-text) !important;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.agri-dashboard-v3 .legend-value {
+  display: contents !important;
+}
+
+.agri-dashboard-v3 .legend-area-value {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+  min-width: 0 !important;
+  color: var(--ekin-text) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  line-height: 1.15 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.agri-dashboard-v3 .legend-area-value {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
+
+.agri-dashboard-v3 .legend-area-unit {
+  color: var(--ekin-muted) !important;
+}
+
+.agri-dashboard-v3 .legend-percent-value {
+  grid-column: 3 !important;
+  grid-row: 1 / span 2 !important;
+  align-self: center !important;
+  justify-self: end !important;
+  flex: 0 0 auto !important;
+  color: var(--ekin-muted) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1.15 !important;
+  white-space: nowrap !important;
+}
+
+.agri-dashboard-v3 .category-legend::-webkit-scrollbar {
+  width: 5px !important;
+}
+
+.agri-dashboard-v3 .category-legend::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.agri-dashboard-v3 .category-legend::-webkit-scrollbar-thumb {
+  border-radius: 999px !important;
+  background: rgba(148, 163, 184, 0.36) !important;
+}
+
+.agri-dashboard-v3 .category-legend::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.56) !important;
+}
+
+.agri-dashboard-v3 .land-category-loading-container,
+.agri-dashboard-v3 .land-category-no-data,
+.agri-dashboard-v3 .land-category-error {
+  min-height: 0 !important;
+  color: var(--ekin-muted) !important;
+}
+
+@container ekin-panel (max-width: 400px) {
+  .agri-dashboard-v3 .land-category-content {
+    gap: 8px !important;
+    padding: 13px 12px 11px !important;
+  }
+
+  .agri-dashboard-v3 .land-category-main-content {
+    grid-template-columns: minmax(146px, 48%) minmax(0, 1fr) !important;
+    gap: 6px !important;
+  }
+
+  .agri-dashboard-v3 .legend-item {
+    min-height: 40px !important;
+    padding: 3px 5px !important;
+    column-gap: 5px !important;
+  }
+
+  .agri-dashboard-v3 .legend-label {
+    font-size: 11px !important;
+  }
+
+  .agri-dashboard-v3 .legend-area-value,
+  .agri-dashboard-v3 .legend-percent-value {
+    font-size: 10px !important;
+  }
+}
+/* ===== End Ekin Turi refined panel ===== */
+/* ===== Shared empty states ===== */
+.agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data
+) {
+  --agri-empty-text: #eef4fb;
+  --agri-empty-muted: #91a2b7;
+  --agri-empty-accent: #69b8d6;
+  --agri-empty-icon-bg: rgba(105, 184, 214, 0.1);
+  --agri-empty-icon-border: rgba(105, 184, 214, 0.24);
+  position: relative !important;
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  gap: 7px !important;
+  padding: 18px 22px !important;
+  overflow: auto !important;
+  color: var(--agri-empty-text) !important;
+  background: transparent !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+}
+
+.agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data
+)::before {
+  content: none !important;
+  display: none !important;
+}
+
+.agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data
+) h3 {
+  max-width: 280px !important;
+  margin: 0 !important;
+  color: var(--agri-empty-text) !important;
+  font-size: 14px !important;
+  line-height: 1.3 !important;
+  font-weight: 800 !important;
+  letter-spacing: 0 !important;
+}
+
+.agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data
+) p {
+  max-width: 290px !important;
+  margin: 0 !important;
+  color: var(--agri-empty-muted) !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+}
+
+.agri-dashboard-v3 :is(
+  .land-category-no-data,
+  .kadastr-status-no-data
+) button {
+  min-height: 30px !important;
+  margin-top: 5px !important;
+  padding: 6px 12px !important;
+  border: 1px solid rgba(105, 184, 214, 0.3) !important;
+  border-radius: 6px !important;
+  background: rgba(105, 184, 214, 0.1) !important;
+  color: var(--agri-empty-text) !important;
+  box-shadow: none;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  font-weight: 700 !important;
+}
+
+.agri-dashboard-v3 :is(
+  .land-category-no-data,
+  .kadastr-status-no-data
+) button:hover {
+  border-color: rgba(105, 184, 214, 0.5) !important;
+  background: rgba(105, 184, 214, 0.17) !important;
+}
+
+.agri-dashboard-v3 .kadastr-status-no-data .filter-summary {
+  max-width: 300px !important;
+  margin-top: 3px !important;
+  color: var(--agri-empty-muted) !important;
+  opacity: 0.85 !important;
+}
+
+html.light-theme .agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data
+),
+html[data-theme="light"] .agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data
+),
+body.light-theme .agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data
+) {
+  --agri-empty-text: #172033;
+  --agri-empty-muted: #64748b;
+  --agri-empty-accent: #287b99;
+  --agri-empty-icon-bg: rgba(40, 123, 153, 0.07);
+  --agri-empty-icon-border: rgba(40, 123, 153, 0.2);
+}
+/* ===== End shared empty states ===== */
+/* ===== Neutral status refinement ===== */
+.agri-dashboard-v3 .construction-years-loading-container::before {
+  content: none !important;
+  display: none !important;
+  animation: none !important;
+  background: none !important;
+}
+
+.agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data,
+  .agri-v11-regional-stats-error,
+  .land-category-error,
+  .construction-years-error,
+  .kadastr-status-error
+) {
+  --agri-status-text: #aeb7ca;
+  --agri-status-muted: #7f899d;
+  --agri-status-icon: #596174;
+  position: relative !important;
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  gap: 10px !important;
+  padding: 18px 22px !important;
+  overflow: auto !important;
+  color: var(--agri-status-text) !important;
+  background: transparent !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+}
+
+.agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data,
+  .agri-v11-regional-stats-error,
+  .land-category-error,
+  .construction-years-error,
+  .kadastr-status-error
+)::before {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+}
+
+.agri-dashboard-v3 .agri-empty-state-icon {
+  display: block !important;
+  flex: 0 0 auto !important;
+  width: 56px !important;
+  height: 56px !important;
+  margin: 0 0 7px !important;
+  color: var(--agri-status-icon) !important;
+  fill: none !important;
+  filter: none !important;
+}
+
+.agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data,
+  .agri-v11-regional-stats-error,
+  .land-category-error,
+  .construction-years-error,
+  .kadastr-status-error
+) h3 {
+  max-width: 300px !important;
+  margin: 0 !important;
+  color: var(--agri-status-text) !important;
+  font-size: 15px !important;
+  line-height: 1.3 !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+
+.agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data,
+  .agri-v11-regional-stats-error,
+  .land-category-error,
+  .construction-years-error,
+  .kadastr-status-error
+) p {
+  max-width: 310px !important;
+  margin: 0 !important;
+  color: var(--agri-status-muted) !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+}
+
+.agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data,
+  .agri-v11-regional-stats-error,
+  .land-category-error,
+  .construction-years-error,
+  .kadastr-status-error
+) button {
+  min-height: 30px !important;
+  margin-top: 4px !important;
+  padding: 6px 16px !important;
+  border: 1px solid #159ee7 !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  color: #20a9f4 !important;
+  box-shadow: none;
+  filter: none !important;
+  transform: none !important;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  font-weight: 600 !important;
+}
+
+.agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data,
+  .agri-v11-regional-stats-error,
+  .land-category-error,
+  .construction-years-error,
+  .kadastr-status-error
+) button:hover {
+  border-color: #38b8ff !important;
+  background: rgba(21, 158, 231, 0.08) !important;
+  color: #4fc3ff !important;
+  box-shadow: none;
+  filter: none !important;
+  transform: none !important;
+}
+
+html.light-theme .agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data,
+  .agri-v11-regional-stats-error,
+  .land-category-error,
+  .construction-years-error,
+  .kadastr-status-error
+),
+html[data-theme="light"] .agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data,
+  .agri-v11-regional-stats-error,
+  .land-category-error,
+  .construction-years-error,
+  .kadastr-status-error
+),
+body.light-theme .agri-dashboard-v3 :is(
+  .agri-v11-regional-stats-no-data,
+  .land-category-no-data,
+  .construction-years-no-data,
+  .kadastr-status-no-data,
+  .agri-v11-regional-stats-error,
+  .land-category-error,
+  .construction-years-error,
+  .kadastr-status-error
+) {
+  --agri-status-text: #475569;
+  --agri-status-muted: #718096;
+  --agri-status-icon: #667085;
+}
+/* ===== End neutral status refinement ===== */
+
+/* Compact selected date/index card on the map. */
+.agri-dashboard-date-index-overlay.agri-dashboard-indicator-overlay--compact
+  .vegetation-stats-widget.agri-date-index-card,
+.agri-dashboard-date-index-overlay .agri-date-index-card {
+  padding: 9px 12px !important;
+  border: 1px solid rgba(63, 203, 255, 0.22) !important;
+  border-radius: var(--agri-widget-radius) !important;
+  background: radial-gradient(circle at 0 0, rgba(0, 185, 255, 0.13), transparent 52%), rgba(22, 24, 39, 0.96) !important;
+  box-shadow: none;
+  backdrop-filter: blur(8px);
+}
+.agri-dashboard-date-index-overlay .agri-date-index-card .widget-content,
+.agri-dashboard-date-index-overlay .agri-date-index-card .stat-main { width: 100% !important; height: 100% !important; padding: 0 !important; }
+.agri-dashboard-date-index-overlay .agri-date-index-meta { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+.agri-dashboard-date-index-overlay .agri-date-index-key { padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, var(--agri-date-index-color) 18%, transparent); color: var(--agri-date-index-color); font-size: 10px; font-weight: 900; line-height: 1; letter-spacing: 0.55px; }
+.agri-dashboard-date-index-overlay .agri-date-index-date { color: #9fb4c8; font-size: 10px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.agri-dashboard-date-index-overlay .agri-date-index-value-row { width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 7px; }
+.agri-dashboard-date-index-overlay .agri-date-index-accent { width: 4px; height: 18px; flex: 0 0 4px; border-radius: 4px; background: var(--agri-date-index-color); box-shadow: none; }
+.agri-dashboard-date-index-overlay .agri-date-index-card .stat-value { font-size: 19px !important; font-weight: 900 !important; line-height: 1 !important; letter-spacing: 0.15px !important; }
+.agri-dashboard-date-index-overlay .agri-date-index-card.light-theme { border-color: rgba(0, 137, 183, 0.2) !important; background: radial-gradient(circle at 0 0, rgba(0, 168, 232, 0.1), transparent 52%), rgba(255, 255, 255, 0.97) !important; box-shadow: none; }
+.agri-dashboard-date-index-overlay .agri-date-index-card.light-theme .agri-date-index-date { color: #526979; }
+
+/* ≤1400px: pie without legend — full centered chart (overrides earlier flex: display rules) */
+@media (max-width: 1400px) {
+  .agri-dashboard-v3 .category-legend,
+  .agri-dashboard-v3 .land-category-card .category-legend {
+    display: none !important;
+  }
+
+  .agri-dashboard-v3 .land-category-card .land-category-main-content,
+  .agri-dashboard-v3 .land-category-card .land-category-main-content--no-legend {
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  .agri-dashboard-v3 .land-category-card .land-category-chart-container {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  .agri-dashboard-v3 .land-category-card .land-category-echart,
+  .agri-dashboard-v3 .land-category-echart {
+    width: min(100%, 100cqh) !important;
+    height: min(100%, 100cqw) !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+  }
+}
+
+/* 2K last: pie legend text must win over later 11/12px locks */
+@media (min-width: 1921px) and (min-height: 1081px) {
+  .agri-dashboard-v3 .legend-label,
+  .agri-dashboard-v3 .legend-area-value,
+  .agri-dashboard-v3 .legend-percent-value,
+  .agri-dashboard-v3 .legend-value,
+  .agri-dashboard-v3 .land-category-card .category-legend .legend-label,
+  .agri-dashboard-v3 .land-category-card.light-theme .category-legend .legend-label,
+  .agri-dashboard-v3 .land-category-card.dark-theme .category-legend .legend-label,
+  .agri-dashboard-v3 .land-category-card .category-legend .legend-area-value,
+  .agri-dashboard-v3 .land-category-card .category-legend .legend-value,
+  html.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-label,
+  html[data-theme="light"] .agri-dashboard-v3 .land-category-card.light-theme .legend-label,
+  body.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-label,
+  html.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-area-value,
+  html[data-theme="light"] .agri-dashboard-v3 .land-category-card.light-theme .legend-area-value,
+  body.light-theme .agri-dashboard-v3 .land-category-card.light-theme .legend-area-value {
+    font-size: 14px !important;
+    line-height: 1.3 !important;
+  }
+}

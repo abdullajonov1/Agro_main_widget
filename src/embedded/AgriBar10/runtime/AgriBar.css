@@ -1,0 +1,1359 @@
+/* ===== Vegetation Health Widget - Warm Paper UI (matches AgriFilter warm theme) ===== */
+
+.construction-years-card {
+  height: 100% !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
+
+  background: #ebebeb !important;
+  border-radius: 12px !important;
+  border: none !important;
+  box-shadow: none;
+
+  overflow: hidden !important;
+  transform: translateZ(0) !important;
+  isolation: isolate !important;
+  font-family: "Geologica", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif !important;
+  position: relative !important;
+  padding: 8px !important;
+
+  color: #0f172a !important;
+}
+
+.construction-years-card::before {
+  content: none !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 0 !important;
+
+  /* emerald -> amber accent */
+  background: none !important;
+  opacity: 0 !important;
+}
+
+.construction-years-card .recharts-tooltip-cursor {
+  fill: transparent !important;
+}
+
+.construction-years-card:focus,
+.construction-years-card:active,
+.construction-years-chart-container:focus,
+.construction-years-chart-container:active,
+.construction-years-card .recharts-wrapper:focus,
+.construction-years-card .recharts-wrapper:active,
+.construction-years-card .recharts-surface:focus,
+.construction-years-card .recharts-surface:active,
+.construction-years-card svg:focus,
+.construction-years-card svg:active {
+  outline: none !important;
+  box-shadow: none;
+}
+
+.construction-years-content {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  position: relative !important;
+  z-index: 1 !important;
+  background: #ebebeb !important;
+
+  animation: construction-years-fadeInUp 0.6s ease-out !important;
+}
+
+/* Header */
+.construction-years-header {
+  display: flex !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+  margin-bottom: 8px !important;
+  padding-top: 7px !important;
+  padding-left: 6px !important;
+  position: relative !important;
+}
+
+.construction-years-header-title {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #0b1220 !important;
+  text-align: left !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+/* Controls */
+.construction-years-header-controls {
+  position: absolute !important;
+  right: 0 !important;
+  top: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  z-index: 220 !important;
+}
+
+.construction-years-sort-buttons {
+  display: flex !important;
+  gap: 0 !important;
+  border-radius: 14px !important;
+
+  /* light border */
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+
+  overflow: hidden !important;
+  backdrop-filter: blur(10px) !important;
+
+  /* softer */
+  box-shadow: none;
+}
+
+.construction-years-card .construction-years-sort-button {
+  background: rgba(255, 255, 255, 0.72) !important;
+  border: none !important;
+  padding: 9px 12px !important;
+  cursor: pointer !important;
+  font-size: 13px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  color: #0f172a !important;
+  transition:
+    transform 0.15s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease !important;
+  font-weight: 750 !important;
+}
+
+.construction-years-card .construction-years-sort-button:hover {
+  background: rgba(16, 185, 129, 0.1) !important;
+  transform: translateY(-1px) !important;
+}
+
+.construction-years-card .construction-years-sort-button.active {
+  background: linear-gradient(135deg, #10b981 0%, #f59e0b 100%) !important;
+  color: #0b1220 !important;
+  box-shadow: none;
+}
+
+/* Select */
+.construction-years-card .construction-years-display-count {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+
+  padding: 9px 14px !important;
+  padding-right: 28px !important;
+
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  border-radius: 14px !important;
+
+  background: rgba(255, 255, 255, 0.72) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%230f172a' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+
+  font-size: 13px !important;
+  color: #0f172a !important;
+  cursor: pointer !important;
+
+  transition:
+    transform 0.15s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease !important;
+  font-weight: 700 !important;
+
+  box-shadow: none;
+  backdrop-filter: blur(10px) !important;
+}
+
+.construction-years-card .construction-years-display-count option {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  padding: 10px !important;
+}
+
+.construction-years-card .construction-years-display-count:hover {
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  transform: translateY(-1px) !important;
+}
+
+.construction-years-card .construction-years-display-count:focus {
+  outline: none !important;
+  border-color: rgba(245, 158, 11, 0.55) !important;
+  box-shadow: none;
+  transform: translateY(-1px) !important;
+}
+
+/* Chart container */
+.construction-years-chart-container {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+
+  background: #ebebeb !important;
+  border-radius: 26px !important;
+  backdrop-filter: none !important;
+
+  border: 1px solid #e5e7eb !important;
+  overflow: hidden !important;
+  margin-top: 0 !important;
+  padding: 6px 5px 2px !important;
+  box-shadow: none;
+}
+
+.construction-years-chart-container .recharts-responsive-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+@media (max-width: 768px) {
+  .construction-years-card {
+    padding: 8px !important;
+    border-radius: 12px !important;
+  }
+
+  .construction-years-chart-container {
+    min-height: 0 !important;
+    border-radius: 20px !important;
+    padding: 6px 2px 2px 2px !important;
+  }
+}
+
+/* IMPORTANT: keep individual bar colors from <Cell/> */
+.construction-years-card .recharts-bar-rectangle path {
+  transition:
+    opacity 0.25s ease,
+    fill 0.25s ease !important;
+}
+
+.construction-years-card .recharts-bar {
+  shape-rendering: geometricPrecision !important;
+}
+
+/* Loading & error states */
+.construction-years-loading-container,
+.construction-years-error,
+.construction-years-no-data {
+  position: relative !important;
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  background: transparent !important;
+  border-radius: 14px !important;
+  padding: 18px 22px !important;
+  color: #0f172a !important;
+  text-align: center !important;
+}
+
+/* Use shared AgriChartLoader — hide legacy conic spinner */
+.construction-years-loading-container::before {
+  content: none !important;
+  display: none !important;
+}
+
+.construction-years-loading-container > .agri-chart-loader {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+}
+
+.construction-years-error p {
+  color: #dc2626 !important;
+  margin-bottom: 12px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+
+.construction-years-no-data h3 {
+  color: #0b1220 !important;
+  margin-bottom: 8px !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+}
+
+.construction-years-no-data p {
+  margin-bottom: 14px !important;
+  font-size: 13px !important;
+  color: rgba(15, 23, 42, 0.7) !important;
+}
+
+/* Tooltip - Light mode defaults */
+.construction-years-card .year-tooltip {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+  border-radius: 10px !important;
+  padding: 8px 10px !important;
+
+  box-shadow: none;
+  z-index: 250 !important;
+  font-size: 11px !important;
+  backdrop-filter: blur(16px) !important;
+  color: #0f172a !important;
+  max-width: 190px !important;
+  white-space: nowrap !important;
+}
+
+.construction-years-card .year-tooltip-title {
+  font-weight: 900 !important;
+  margin-bottom: 5px !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1) !important;
+  padding-bottom: 4px !important;
+
+  /* emerald -> amber text */
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  -webkit-text-fill-color: currentColor !important;
+  background-clip: initial !important;
+
+  font-size: 12px !important;
+}
+
+.construction-years-card .year-tooltip-content {
+  font-size: 11px !important;
+  color: #0f172a !important;
+}
+
+.construction-years-card .year-tooltip-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  margin: 3px 0 !important;
+  gap: 6px !important;
+  min-width: auto !important;
+}
+
+.construction-years-card .year-tooltip-label {
+  color: rgba(15, 23, 42, 0.65) !important;
+  margin-right: 0 !important;
+  font-weight: 650 !important;
+  flex-shrink: 0 !important;
+}
+
+.construction-years-card .year-tooltip-value {
+  font-weight: 900 !important;
+  color: #0b1220 !important;
+  text-align: right !important;
+  flex-shrink: 0 !important;
+}
+
+/* Dark theme tooltip overrides */
+.construction-years-card.dark-theme .year-tooltip {
+  background: rgba(7, 26, 43, 0.88) !important;
+  border: 1px solid var(--bar-border) !important;
+  box-shadow: none;
+  color: var(--bar-text) !important;
+}
+
+.construction-years-card.dark-theme .year-tooltip-title {
+  border-bottom-color: var(--bar-border) !important;
+}
+
+.construction-years-card.dark-theme .year-tooltip-content {
+  color: var(--bar-text) !important;
+}
+
+.construction-years-card.dark-theme .year-tooltip-label {
+  color: var(--bar-muted) !important;
+}
+
+.construction-years-card.dark-theme .year-tooltip-value {
+  color: var(--bar-text) !important;
+}
+
+@media (max-width: 480px) {
+  .construction-years-card .year-tooltip {
+    padding: 10px 12px !important;
+    font-size: 11px !important;
+    max-width: 180px !important;
+  }
+
+  .construction-years-card .year-tooltip-title {
+    font-size: 12px !important;
+    margin-bottom: 6px !important;
+    padding-bottom: 4px !important;
+  }
+
+  .construction-years-card .year-tooltip-row {
+    margin: 4px 0 !important;
+  }
+}
+
+/* Map indicator (keep statuses, adapt palette) */
+.construction-years-card .map-connection-indicator {
+  position: absolute !important;
+  top: 12px !important;
+  right: 80px !important;
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 13px !important;
+  z-index: 210 !important;
+  transition: all 0.2s ease !important;
+  box-shadow: none;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+}
+
+.construction-years-card .map-connection-indicator.connected {
+  background: rgba(16, 185, 129, 0.95) !important;
+  color: #062a1e !important;
+}
+
+.construction-years-card .map-connection-indicator.connecting {
+  background: rgba(245, 158, 11, 0.95) !important;
+  color: #2a1602 !important;
+  animation: construction-years-spin 1s linear infinite !important;
+}
+
+.construction-years-card .map-connection-indicator.loading {
+  background: rgba(56, 189, 248, 0.95) !important;
+  color: #01222a !important;
+  animation: construction-years-pulse 1.5s infinite !important;
+}
+
+.construction-years-card .map-connection-indicator.failed,
+.construction-years-card .map-connection-indicator.idle {
+  background: rgba(220, 38, 38, 0.92) !important;
+  color: #2a0505 !important;
+}
+
+.construction-years-card .indicator-icon {
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+/* Hint */
+.construction-years-hint {
+  position: absolute !important;
+  bottom: 8px !important;
+  left: 0 !important;
+  right: 0 !important;
+  text-align: center !important;
+  font-size: 11px !important;
+  color: rgba(15, 23, 42, 0.55) !important;
+  opacity: 0.9 !important;
+  padding: 6px !important;
+  margin-bottom: 8px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.3px !important;
+}
+
+/* Buttons inside card (non-sort/select) */
+.construction-years-card
+  button:not(.construction-years-sort-button):not(
+    .construction-years-display-count
+  ):not(.agri-status-col-button) {
+  border: none !important;
+  border-radius: 999px !important;
+  padding: 11px 18px !important;
+  cursor: pointer !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease !important;
+  text-transform: none !important;
+  letter-spacing: 0.2px !important;
+
+  background: linear-gradient(135deg, #10b981 0%, #f59e0b 100%) !important;
+  color: #0b1220 !important;
+
+  box-shadow: none;
+
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.construction-years-card
+  button:not(.construction-years-sort-button):not(
+    .construction-years-display-count
+  ):not(.agri-status-col-button)::before {
+  content: "" !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: -100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.35),
+    transparent
+  ) !important;
+  transition: left 0.45s !important;
+}
+
+.construction-years-card
+  button:not(.construction-years-sort-button):not(
+    .construction-years-display-count
+  ):not(.agri-status-col-button):hover {
+  transform: translateY(-1px) !important;
+  filter: brightness(1.02) !important;
+  box-shadow: none;
+}
+
+.construction-years-card
+  button:not(.construction-years-sort-button):not(
+    .construction-years-display-count
+  ):not(.agri-status-col-button):hover::before {
+  left: 100% !important;
+}
+
+.construction-years-card
+  button:not(.construction-years-sort-button):not(
+    .construction-years-display-count
+  ):not(.agri-status-col-button):active {
+  transform: translateY(0) scale(0.99) !important;
+}
+
+/* Force light theme */
+.construction-years-card,
+.construction-years-card.dark-theme,
+.construction-years-card.light-theme {
+  background: #ebebeb !important;
+  color: #0f172a !important;
+}
+
+/* Axis + grid (light mode) */
+.construction-years-card .recharts-layer.recharts-cartesian-axis-tick text {
+  font-size: 12px !important;
+  fill: #111827 !important;
+  cursor: pointer !important;
+  font-weight: 400 !important;
+}
+
+html.light-theme .construction-years-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text,
+html[data-theme="light"] .construction-years-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text,
+body.light-theme .construction-years-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text {
+  fill: #000000 !important;
+}
+
+html.light-theme .agri-v11-regional-stats-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text,
+html[data-theme="light"] .agri-v11-regional-stats-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text,
+body.light-theme .agri-v11-regional-stats-card.light-theme .recharts-layer.recharts-cartesian-axis-tick text {
+  fill: #000000 !important;
+}
+
+.construction-years-card .recharts-label-content,
+.construction-years-card .recharts-label-list text,
+.construction-years-card text.recharts-label,
+.construction-years-card .recharts-text.recharts-label,
+.construction-years-card text.agri-bar-value-label {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  text-shadow: none;
+  fill: #000000 !important;
+  color: #000000 !important;
+  stroke: none !important;
+  opacity: 1 !important;
+  fill-opacity: 1 !important;
+}
+
+html[data-theme="dark"] .construction-years-card .recharts-label-content,
+html[data-theme="dark"] .construction-years-card .recharts-label-list text,
+html[data-theme="dark"] .construction-years-card text.agri-bar-value-label,
+html.dark-theme .construction-years-card .recharts-label-content,
+html.dark-theme .construction-years-card .recharts-label-list text,
+html.dark-theme .construction-years-card text.agri-bar-value-label,
+body.dark-theme .construction-years-card .recharts-label-content,
+body.dark-theme .construction-years-card .recharts-label-list text,
+body.dark-theme .construction-years-card text.agri-bar-value-label,
+body:not(.light-theme)
+  .construction-years-card.dark-theme
+  .recharts-label-content,
+body:not(.light-theme)
+  .construction-years-card.dark-theme
+  .recharts-label-list
+  text,
+body:not(.light-theme)
+  .construction-years-card.dark-theme
+  text.agri-bar-value-label,
+.construction-years-card.dark-theme .recharts-label-content,
+.construction-years-card.dark-theme .recharts-label-list text,
+.construction-years-card.dark-theme text.agri-bar-value-label {
+  fill: #ffffff !important;
+  color: #ffffff !important;
+  fill-opacity: 1 !important;
+}
+
+.construction-years-card
+  .recharts-layer.recharts-cartesian-axis-tick
+  text.tick-text-default {
+  fill: #111827 !important;
+}
+
+.construction-years-card
+  .recharts-layer.recharts-cartesian-axis-tick
+  text.tick-text-selected {
+  fill: #ffffff !important;
+}
+
+.construction-years-card
+  .recharts-layer.recharts-cartesian-axis-tick
+  text:hover {
+  fill: #111827 !important;
+  transition: none !important;
+}
+
+.construction-years-card .recharts-cartesian-grid-vertical line {
+  stroke: rgba(15, 23, 42, 0.08) !important;
+  stroke-width: 1 !important;
+  stroke-dasharray: none !important;
+}
+
+.construction-years-card .recharts-cartesian-grid-horizontal line {
+  stroke: rgba(15, 23, 42, 0.06) !important;
+  stroke-width: 1 !important;
+}
+
+.construction-years-card .recharts-cartesian-axis-line {
+  display: none !important;
+}
+
+/* Hover effects for bars */
+.construction-years-card .recharts-bar-rectangle {
+  transition:
+    transform 0.2s ease,
+    filter 0.2s ease !important;
+  cursor: pointer !important;
+}
+
+.construction-years-card .recharts-bar-rectangle:hover {
+  filter: brightness(1.05) saturate(1.05) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Animations */
+@keyframes construction-years-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes construction-years-pulse {
+  0% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+}
+
+@keyframes construction-years-fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .construction-years-header {
+    margin-bottom: 6px !important;
+  }
+  .construction-years-header-title {
+    font-size: 14px !important;
+  }
+  .construction-years-header-controls {
+    position: static !important;
+    justify-content: center !important;
+    margin-top: 10px !important;
+  }
+  .construction-years-card .construction-years-sort-button {
+    padding: 8px 10px !important;
+    font-size: 13px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .construction-years-card {
+    padding: 16px !important;
+  }
+  .construction-years-header-controls {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .construction-years-card .construction-years-display-count {
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* ===== AgriPie3-like Day/Night Design Parity ===== */
+.construction-years-card,
+.construction-years-card.light-theme {
+  --bar-bg: #ffffff;
+  --bar-bg-soft: #ffffff;
+  --bar-surface: #ffffff;
+  --bar-border: rgba(61, 87, 85, 0.18);
+  --bar-text: #000000;
+  --bar-muted: #000000;
+  --bar-shadow: none;
+
+  background: #ffffff !important;
+  border: none !important;
+  box-shadow: none;
+  border-radius: 12px !important;
+  color: var(--bar-text) !important;
+  padding: 10px !important;
+}
+
+html.dark-theme .construction-years-card,
+html[data-theme="dark"] .construction-years-card,
+body.dark-theme .construction-years-card,
+.construction-years-card.dark-theme {
+  --bar-bg: #030a12;
+  --bar-bg-soft: #061420;
+  --bar-surface: rgba(9, 28, 44, 0.74);
+  --bar-border: rgba(126, 214, 255, 0.16);
+  --bar-text: #e9f8ff;
+  --bar-muted: #9cc7dd;
+  --bar-shadow: none;
+
+  background:
+    radial-gradient(
+      120% 90% at 14% 10%,
+      rgba(83, 226, 255, 0.12),
+      transparent 58%
+    ),
+    radial-gradient(
+      130% 90% at 86% 0%,
+      rgba(33, 137, 255, 0.14),
+      transparent 62%
+    ),
+    linear-gradient(156deg, var(--bar-bg) 0%, var(--bar-bg-soft) 100%) !important;
+  border: none !important;
+  box-shadow: none;
+}
+
+html.light-theme .construction-years-card,
+html[data-theme="light"] .construction-years-card,
+body.light-theme .construction-years-card {
+  --bar-bg: #ffffff;
+  --bar-bg-soft: #ffffff;
+  --bar-surface: #ffffff;
+  --bar-border: rgba(61, 87, 85, 0.18);
+  --bar-text: #000000;
+  --bar-muted: #000000;
+  --bar-shadow: none;
+
+  background: #ffffff !important;
+  border: none !important;
+  box-shadow: none;
+}
+
+.construction-years-content {
+  background: transparent !important;
+}
+
+.construction-years-header {
+  margin-bottom: 8px !important;
+}
+
+.construction-years-header-title {
+  color: var(--bar-text) !important;
+}
+
+.construction-years-chart-container {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 16px !important;
+  box-shadow: none;
+  padding: 4px 4px 6px 4px !important;
+  max-height: calc(100% - 12px) !important;
+}
+
+html[data-theme="dark"]
+  .construction-years-card
+  .recharts-layer.recharts-cartesian-axis-tick
+  text,
+body:not(.light-theme)
+  .construction-years-card.dark-theme
+  .recharts-layer.recharts-cartesian-axis-tick
+  text,
+.construction-years-card.dark-theme
+  .recharts-layer.recharts-cartesian-axis-tick
+  text {
+  fill: #e9f8ff !important;
+}
+
+html[data-theme="dark"]
+  .construction-years-card
+  .recharts-cartesian-grid-vertical
+  line,
+html[data-theme="dark"]
+  .construction-years-card
+  .recharts-cartesian-grid-horizontal
+  line,
+body:not(.light-theme)
+  .construction-years-card.dark-theme
+  .recharts-cartesian-grid-vertical
+  line,
+body:not(.light-theme)
+  .construction-years-card.dark-theme
+  .recharts-cartesian-grid-horizontal
+  line,
+.construction-years-card.dark-theme .recharts-cartesian-grid-vertical line,
+.construction-years-card.dark-theme .recharts-cartesian-grid-horizontal line {
+  stroke: rgba(233, 248, 255, 0.1) !important;
+}
+
+html[data-theme="dark"] .construction-years-card .agri-v11-regional-stats-info,
+body:not(.light-theme) .construction-years-card.dark-theme .agri-v11-regional-stats-info,
+.construction-years-card.dark-theme .agri-v11-regional-stats-info,
+html[data-theme="dark"] .construction-years-card .construction-years-no-data,
+body:not(.light-theme)
+  .construction-years-card.dark-theme
+  .construction-years-no-data,
+.construction-years-card.dark-theme .construction-years-no-data,
+html[data-theme="dark"] .construction-years-card .construction-years-error,
+body:not(.light-theme)
+  .construction-years-card.dark-theme
+  .construction-years-error,
+.construction-years-card.dark-theme .construction-years-error {
+  color: #e9f8ff !important;
+}
+
+/* ── Override global .agri-v11-regional-stats-info inside our card ── */
+.construction-years-card .agri-v11-regional-stats-info {
+  background: transparent !important;
+  border: 1px solid var(--bar-border, rgba(15, 23, 42, 0.1)) !important;
+  box-shadow: none;
+  backdrop-filter: none !important;
+  margin: 8px 0 !important;
+  padding: 24px 16px !important;
+  border-radius: 14px !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--bar-text, #0f172a) !important;
+  text-align: center !important;
+}
+
+.construction-years-card .agri-v11-regional-stats-info h3 {
+  color: var(--bar-text, #0f172a) !important;
+  font-size: 15px !important;
+  margin-bottom: 8px !important;
+}
+
+.construction-years-card .agri-v11-regional-stats-info p {
+  color: var(--bar-muted, rgba(15, 23, 42, 0.65)) !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+
+/* ═══════════════════════════════════════
+   RESPONSIVE — data-bar-size breakpoints
+   xs  < 220px
+   sm  220–340px
+   md  340–500px
+   lg  ≥ 500px
+   
+   Hybrid approach: clamp() for continuous scaling +
+   discrete breakpoints for layout structural changes
+════════════════════════════════════════ */
+
+/* ── MD (340–499px) ── */
+.construction-years-card[data-bar-size="md"] {
+  padding: clamp(6px, 1.2vw, 8px) !important;
+  border-radius: 12px !important;
+}
+.construction-years-card[data-bar-size="md"] .construction-years-header-title {
+  font-size: 14px !important;
+}
+.construction-years-card[data-bar-size="md"]
+  .construction-years-header-controls {
+  position: static !important;
+  margin-top: 6px !important;
+  justify-content: flex-end !important;
+}
+.construction-years-card[data-bar-size="md"] .construction-years-sort-button {
+  padding: clamp(6px, 1.2vw, 7px) clamp(8px, 1.5vw, 9px) !important;
+  font-size: clamp(11px, 2vw, 12px) !important;
+}
+.construction-years-card[data-bar-size="md"] .construction-years-display-count {
+  padding: clamp(6px, 1.2vw, 7px) clamp(9px, 1.8vw, 10px) !important;
+  font-size: clamp(11px, 2vw, 12px) !important;
+}
+
+/* ── SM (220–339px) ── */
+.construction-years-card[data-bar-size="sm"] {
+  padding: clamp(6px, 1.2vw, 8px) !important;
+  border-radius: 12px !important;
+}
+.construction-years-card[data-bar-size="sm"] .construction-years-header {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: clamp(4px, 1vw, 6px) !important;
+  margin-bottom: clamp(4px, 1vw, 6px) !important;
+}
+.construction-years-card[data-bar-size="sm"] .construction-years-header-title {
+  font-size: 14px !important;
+}
+.construction-years-card[data-bar-size="sm"]
+  .construction-years-header-controls {
+  position: static !important;
+  gap: clamp(4px, 1vw, 6px) !important;
+}
+.construction-years-card[data-bar-size="sm"] .construction-years-sort-button {
+  padding: clamp(5px, 1vw, 6px) clamp(7px, 1.4vw, 8px) !important;
+  font-size: clamp(10px, 1.8vw, 11px) !important;
+}
+.construction-years-card[data-bar-size="sm"] .construction-years-display-count {
+  display: none !important;
+}
+.construction-years-card[data-bar-size="sm"] .recharts-label-content {
+  font-size: 12px !important;
+}
+
+/* ── XS (< 220px) ── */
+.construction-years-card[data-bar-size="xs"] {
+  padding: clamp(4px, 1vw, 6px) !important;
+  border-radius: 12px !important;
+}
+.construction-years-card[data-bar-size="xs"]
+  .construction-years-header-controls {
+  display: none !important;
+}
+.construction-years-card[data-bar-size="xs"] .construction-years-header-title {
+  font-size: 14px !important;
+}
+.construction-years-card[data-bar-size="xs"] .recharts-label-content {
+  display: none !important;
+}
+.construction-years-card[data-bar-size="xs"] .agri-v11-regional-stats-info h3 {
+  font-size: clamp(11px, 2.2vw, 12px) !important;
+}
+.construction-years-card[data-bar-size="xs"] .agri-v11-regional-stats-info p {
+  font-size: clamp(9px, 1.8vw, 10px) !important;
+}
+
+/* ===== Responsive LabelList and Bar Value Display ===== */
+/* Hide LabelList only on very small screens */
+@media (max-width: 360px) {
+  .construction-years-card .recharts-label-content {
+    display: none !important;
+  }
+}
+
+/* Reduce LabelList font size on small screens */
+@media (max-width: 480px) {
+  .construction-years-card .recharts-label-content {
+    font-size: 12px !important;
+  }
+}
+
+/* Keep requested header typography consistent */
+.construction-years-card .construction-years-header-title,
+.construction-years-card[data-bar-size="md"] .construction-years-header-title,
+.construction-years-card[data-bar-size="sm"] .construction-years-header-title,
+.construction-years-card[data-bar-size="xs"] .construction-years-header-title {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+}
+
+/* Final responsive stability overrides */
+.construction-years-card {
+  min-width: 0 !important;
+}
+
+.construction-years-content {
+  min-height: 0 !important;
+}
+
+.construction-years-chart-container {
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: clamp(2px, 0.6vw, 4px) clamp(2px, 0.8vw, 6px) 6px !important;
+  overflow: hidden !important;
+}
+
+.construction-years-card[data-compact-height="true"]
+  .construction-years-chart-container {
+  padding-top: 10px !important;
+}
+
+.construction-years-card[data-bar-size="md"] .construction-years-header {
+  margin-bottom: 8px !important;
+}
+
+.construction-years-card[data-bar-size="sm"] .construction-years-header,
+.construction-years-card[data-bar-size="xs"] .construction-years-header {
+  margin-bottom: 6px !important;
+}
+
+.construction-years-card[data-bar-size="sm"] .construction-years-header-title {
+  font-size: 14px !important;
+}
+
+.construction-years-card[data-bar-size="xs"] .construction-years-header-title {
+  font-size: 14px !important;
+}
+
+/* ===== Eco StatusStats-like VH chart ===== */
+.agri-status-root {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  padding: 2px 2px 6px;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  container-type: inline-size;
+  container-name: agristatus;
+
+  --col-pad-y: clamp(4px, 0.9cqi, 7px);
+  --col-pad-x: clamp(4px, 0.8cqi, 6px);
+  --text-gap: clamp(2px, 0.5cqi, 4px);
+  --value: clamp(11px, 2.6cqi, 15px);
+  --label: clamp(9px, 2.2cqi, 13px);
+  --bar-min-h: clamp(72px, 16cqi, 128px);
+  --ease-smooth: cubic-bezier(0.22, 0.84, 0.28, 1);
+  --status-divider: color-mix(in srgb, var(--bar-border, rgba(15, 23, 42, 0.14)) 90%, transparent);
+  --status-divider-inset: clamp(10px, 2cqi, 18px);
+  --status-text: var(--bar-text, #0f172a);
+  --status-text-dim: var(--bar-muted, rgba(15, 23, 42, 0.62));
+}
+
+.agri-status-grid {
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  align-items: stretch;
+  padding-top: 4px;
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+
+.agri-status-col {
+  position: relative;
+  height: 100%;
+  min-height: clamp(150px, 24cqi, 240px);
+  padding: var(--col-pad-y) var(--col-pad-x) clamp(4px, 0.7cqi, 6px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  background: transparent;
+  --accent: #515052;
+}
+
+.agri-status-col:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: var(--status-divider-inset);
+  bottom: var(--status-divider-inset);
+  right: 0;
+  width: 1px;
+  background: var(--status-divider);
+  pointer-events: none;
+}
+
+.agri-status-col-button {
+  appearance: none;
+  border: none !important;
+  background: transparent !important;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  border-radius: 0 !important;
+  padding: var(--col-pad-y) var(--col-pad-x) clamp(4px, 0.7cqi, 6px) !important;
+  box-shadow: none !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  transition:
+    background 360ms var(--ease-smooth),
+    border-radius 360ms var(--ease-smooth);
+}
+
+.agri-status-col-button:disabled {
+  cursor: default;
+}
+
+.agri-status-col-button:hover:not(:disabled):not(.agri-status-col--selected) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent) !important;
+  border-radius: 12px !important;
+  z-index: 2;
+}
+
+.agri-status-col--selected {
+  background: color-mix(in srgb, var(--accent) 14%, transparent) !important;
+  border-radius: 12px !important;
+  z-index: 1;
+}
+
+.agri-status-col-button.agri-status-col--selected:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 18%, transparent) !important;
+}
+
+.agri-status-col--dimmed {
+  opacity: 0.82;
+}
+
+.agri-status-col--dimmed .agri-status-value,
+.agri-status-col--dimmed .agri-status-label {
+  color: color-mix(in srgb, var(--status-text-dim) 88%, transparent);
+}
+
+.agri-status-col--selected .agri-status-value {
+  color: var(--accent);
+}
+
+.agri-status-col--selected .agri-status-label {
+  color: var(--status-text);
+  font-weight: 400;
+}
+
+.agri-status-col-button:focus-visible {
+  outline: 2px solid var(--bar-border, rgba(15, 23, 42, 0.25));
+  outline-offset: 2px;
+}
+
+.agri-status-text {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: var(--text-gap);
+  align-content: start;
+  justify-items: center;
+  text-align: center;
+  min-height: 40px;
+}
+
+.agri-status-value-wrap {
+  display: inline-flex;
+  align-self: center;
+  justify-content: center;
+  min-height: clamp(18px, 3.6cqi, 22px);
+  padding: 1px 4px;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.agri-status-value {
+  font-family: "Geologica", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: var(--value);
+  line-height: 1.1;
+  font-weight: 700;
+  color: var(--status-text);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: color 360ms var(--ease-smooth);
+}
+
+.agri-status-unit {
+  font-size: 0.72em;
+  font-weight: 500;
+  opacity: 0.78;
+}
+
+.agri-status-label {
+  font-family: "Geologica", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px !important;
+  line-height: 1.25;
+  font-weight: 400;
+  color: var(--status-text-dim);
+  text-align: center;
+  white-space: normal;
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-wrap: balance;
+  transition: color 360ms var(--ease-smooth);
+}
+
+.agri-status-bar-area {
+  pointer-events: none;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--bar-min-h);
+  flex: 1 1 auto;
+  max-height: 82%;
+  margin-top: clamp(4px, 0.7cqi, 6px);
+  padding: clamp(2px, 0.5cqi, 4px) clamp(2px, 0.4cqi, 4px) 0;
+}
+
+.agri-status-chart {
+  min-height: var(--bar-min-h);
+  opacity: 1;
+  transition: opacity 480ms var(--ease-smooth);
+}
+
+.agri-status-chart--dimmed {
+  opacity: 0.72;
+}
+
+.agri-status-chart .recharts-wrapper,
+.agri-status-chart .recharts-surface {
+  overflow: visible;
+  outline: none;
+}
+
+.agri-status-chart .recharts-cartesian-grid,
+.agri-status-chart .recharts-tooltip-wrapper {
+  display: none;
+}
+
+.agri-status-chart path,
+.agri-status-chart .agri-status-bar-shape {
+  transition: opacity 480ms var(--ease-smooth);
+}
+
+html.dark-theme .agri-status-root,
+html[data-theme="dark"] .agri-status-root,
+.construction-years-card.dark-theme .agri-status-root {
+  --status-divider: rgba(233, 248, 255, 0.12);
+  --status-text: #e9f8ff;
+  --status-text-dim: #9cc7dd;
+}
+
+@container agristatus (max-width: 760px) {
+  .agri-status-root {
+    --col-pad-y: clamp(3px, 0.8cqi, 6px);
+    --col-pad-x: clamp(3px, 0.7cqi, 5px);
+    --bar-min-h: clamp(64px, 14cqi, 108px);
+    --value: clamp(11px, 3.4cqi, 14px);
+    --label: clamp(9px, 3.2cqi, 12px);
+  }
+}
+
+@container agristatus (max-width: 600px) {
+  .agri-status-root {
+    --value: clamp(10px, 3.8cqi, 13px);
+    --label: clamp(9px, 3.6cqi, 11px);
+  }
+}
+
+.construction-years-card[data-compact-height="true"] .agri-status-root {
+  --bar-min-h: clamp(48px, 12cqi, 88px);
+  --value: clamp(10px, 2.8cqi, 13px);
+  --label: clamp(8px, 2cqi, 11px);
+}
+
+.construction-years-card[data-bar-size="xs"] .agri-status-unit {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agri-status-col-button,
+  .agri-status-value,
+  .agri-status-label,
+  .agri-status-chart path {
+    transition: none;
+  }
+}
+
+.agri-status-root > .agri-chart-loader {
+  border-radius: 12px;
+  z-index: 4;
+}
+
+.agri-status-root--loading .agri-status-grid {
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+/* 2K+: Vegetatsiya Holati values a bit larger (labels stay 14px) */
+@media (min-width: 1921px) and (min-height: 1081px) {
+  .construction-years-card .agri-status-root {
+    --value: 16px;
+    --label: 14px;
+  }
+
+  .construction-years-card .agri-status-label {
+    font-size: 14px !important;
+  }
+
+  .construction-years-card .agri-status-value,
+  .construction-years-card .agri-status-value-num,
+  .construction-years-card .agri-status-value-wrap,
+  .agri-dashboard-v3 .construction-years-card .agri-status-value,
+  .agri-dashboard-v3 .construction-years-card .agri-status-value-num {
+    font-size: 16px !important;
+    line-height: 1.15 !important;
+  }
+}
+
+/* iPad / short windows ≤910px: smaller Vegetatsiya Holati chart fonts */
+@media (min-width: 1080px) and (max-width: 1400px) and (min-height: 780px) and (max-aspect-ratio: 3/2),
+  (min-width: 1080px) and (max-width: 1400px) and (max-height: 910px) and (min-height: 500px) {
+  .construction-years-card .agri-status-root {
+    --value: 11px;
+    --label: 11px;
+  }
+
+  .construction-years-card .agri-status-label,
+  .agri-dashboard-v3 .construction-years-card .agri-status-label {
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+  }
+
+  .construction-years-card .agri-status-value,
+  .construction-years-card .agri-status-value-num,
+  .agri-dashboard-v3 .construction-years-card .agri-status-value,
+  .agri-dashboard-v3 .construction-years-card .agri-status-value-num {
+    font-size: 11px !important;
+    line-height: 1.1 !important;
+  }
+
+  /* No region selected: values 9px */
+  .construction-years-card .agri-status-root--no-region {
+    --value: 9px;
+  }
+
+  .construction-years-card .agri-status-root--no-region .agri-status-value,
+  .construction-years-card .agri-status-root--no-region .agri-status-value-num,
+  .agri-dashboard-v3 .construction-years-card .agri-status-root--no-region .agri-status-value,
+  .agri-dashboard-v3 .construction-years-card .agri-status-root--no-region .agri-status-value-num {
+    font-size: 9px !important;
+  }
+}

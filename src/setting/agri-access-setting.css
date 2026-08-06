@@ -1,0 +1,743 @@
+@import url("https://fonts.googleapis.com/css2?family=Geologica:wght@100..900&display=swap");
+
+.settingArea {
+    width: 100%;
+    padding: 0;
+    color: inherit;
+    font-family: "Geologica", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.settingsContent {
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* .sourceSelectorCard,
+.accessControlCard {
+    border: 1px solid var(--dark-400, rgba(255, 255, 255, 0.14));
+    border-radius: 6px;
+    background: var(--dark-100, rgba(255, 255, 255, 0.025));
+} */
+
+.sourceSelectorCard {
+    padding: 12px;
+}
+
+.panelCardLabel {
+    margin-bottom: 9px;
+    color: var(--dark-800, rgba(255, 255, 255, 0.72));
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+}
+
+.sourceSelectorCard>div:last-child {
+    width: 100%;
+}
+
+.accessControlCard {
+    padding: 13px 12px 12px;
+}
+
+.accessControlHeader {
+    margin-bottom: 12px;
+}
+
+.accessControlTitle {
+    margin-bottom: 3px;
+    color: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+}
+
+.accessControlDescription {
+    color: var(--dark-800, rgba(255, 255, 255, 0.66));
+    font-size: 12px;
+    line-height: 17px;
+}
+
+.accessSettingsButton {
+    width: 100%;
+    min-height: 34px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.sourceSelectorCard button {
+    border-radius: 4px;
+}
+
+.modalArea {
+    color: #f3f4f6;
+    font-family: "Geologica", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modalBlock {
+    width: min(1200px, calc(100vw - 32px));
+    height: min(800px, calc(100vh - 32px));
+    background: #1f222b;
+    border: 1px solid #343a49;
+    border-radius: 10px;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 305px 1fr;
+}
+
+.modalList {
+    background: #252c41;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.modalListHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.modalListTitle {
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.modalListSubtitle {
+    margin-top: 3px;
+    color: #aeb6ca;
+    font-size: 12px;
+}
+
+.fieldList {
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+}
+
+.modalItem {
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid #77839f;
+    background: #293148;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.modalItem:hover,
+.modalItem.selected {
+    background: #33405f;
+    border-color: #b6c4ed;
+}
+
+.modalItemTitle {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.modalItemInfo {
+    margin-top: 5px;
+    font-size: 13px;
+    color: #b8bfd1;
+}
+
+.modalItemInfo span {
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.addFieldButton {
+    height: 64px;
+    border-radius: 8px;
+    border: 1px dashed #9ca8c4;
+    background: transparent;
+    color: #ffffff;
+    font-size: 34px;
+    cursor: pointer;
+}
+
+.addFieldButton:hover {
+    background: #303a56;
+}
+
+.modalBottomActions {
+    margin-top: auto;
+    display: grid;
+    gap: 8px;
+}
+
+.jsonButton {
+    height: 38px;
+    border-radius: 8px;
+    border: 1px solid #56627c;
+    background: #1f2638;
+    color: #f3f4f6;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+}
+
+.jsonButton:hover {
+    background: #303a56;
+}
+
+.jsonButton input {
+    display: none;
+}
+
+.modalRightPanel {
+    min-width: 0;
+    min-height: 0;
+    background: #20232c;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modalItemFullInfo {
+    flex: 1;
+    min-height: 0;
+    padding: 22px;
+    background: #20232c;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.rightHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #3a4050;
+}
+
+.rightTitle {
+    font-size: 24px;
+    font-weight: 800;
+}
+
+.rightField {
+    margin-top: 6px;
+    color: #aeb6ca;
+    font-size: 14px;
+}
+
+.rightHeaderActions,
+.ruleActions,
+.groupActions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.iconButton,
+.miniIconButton {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid #5a6680;
+    background: #293148;
+    color: white;
+    cursor: pointer;
+}
+
+.miniIconButton {
+    width: 26px;
+    height: 26px;
+    font-size: 12px;
+}
+
+.iconButton:hover,
+.miniIconButton:hover {
+    background: #3b4868;
+}
+
+.iconButton.danger,
+.miniIconButton.danger {
+    border-color: #8f4f5b;
+    color: #ffb8c1;
+}
+
+.rulesArea {
+    padding-top: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ruleCard {
+    padding: 14px;
+    border-radius: 10px;
+    background: #262b36;
+    border: 1px solid #3d465b;
+    transition: 0.2s;
+}
+
+.ruleCard.selectedRule {
+    border-color: #9baee0;
+    background: #2c3448;
+}
+
+.ruleHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ruleInfo {
+    flex: 1;
+    min-width: 0;
+}
+
+.ruleLabel {
+    color: #aeb6ca;
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+
+.ruleValue {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffffff;
+    overflow-wrap: anywhere;
+}
+
+.ruleActions {
+    opacity: 0;
+    transition: 0.2s;
+    flex-shrink: 0;
+}
+
+.ruleCard:hover .ruleActions {
+    opacity: 1;
+}
+
+.smallButton {
+    min-height: 34px;
+    border-radius: 8px;
+    border: 1px solid #5a6680;
+    background: #293148;
+    color: white;
+    cursor: pointer;
+    padding: 0 10px;
+}
+
+.smallButton:hover {
+    background: #3b4868;
+}
+
+.groupsArea {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.groupRow {
+    background: #1d2230;
+    border: 1px solid #384258;
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: #d9deea;
+    font-size: 13px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    transition: 0.2s;
+}
+
+.groupRow.selectedGroup {
+    border-color: #9baee0;
+    background: #273149;
+}
+
+.groupRow span {
+    overflow-wrap: anywhere;
+}
+
+.groupActions {
+    opacity: 0;
+    transition: 0.2s;
+    flex-shrink: 0;
+}
+
+.groupRow:hover .groupActions {
+    opacity: 1;
+}
+
+.addRuleButton {
+    height: 44px;
+    border-radius: 9px;
+    border: 1px dashed #78849f;
+    background: transparent;
+    color: white;
+    cursor: pointer;
+}
+
+.addRuleButton:hover {
+    background: #2b3348;
+}
+
+.emptyMini,
+.emptyRules {
+    color: #8e96aa;
+    font-size: 13px;
+}
+
+.emptyRules {
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px dashed #555f76;
+    text-align: center;
+}
+
+.dialogArea {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dialogBlock {
+    width: 520px;
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 32px);
+    overflow: auto;
+    background: #252b38;
+    border: 1px solid #4c566c;
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 20px 80px rgba(0, 0, 0, 0.4);
+}
+
+.dialogTitle {
+    font-size: 18px;
+    font-weight: 800;
+    margin-bottom: 12px;
+}
+
+.dialogText {
+    color: #c2c8d5;
+    margin-bottom: 16px;
+}
+
+.dialogInput {
+    width: 100%;
+    min-height: 40px;
+    margin-bottom: 10px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid #59657d;
+    background: #1e2430;
+    color: white;
+    outline: none;
+}
+
+.dialogInput:focus {
+    border-color: #9baee0;
+}
+
+.dialogActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.dialogActions button {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid #59657d;
+    background: #30384a;
+    color: white;
+    cursor: pointer;
+}
+
+.dialogActions button:hover {
+    background: #3b465d;
+}
+
+.dangerButton {
+    border-color: #985565 !important;
+    background: #4a2430 !important;
+    color: #ffc4cc !important;
+}
+
+.operatorTabs {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.operatorTabs.fourTabs {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.operatorTabs button {
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid #59657d;
+    background: #1e2430;
+    color: #d8deea;
+    cursor: pointer;
+}
+
+.operatorTabs button:hover,
+.operatorTabs button.active {
+    background: #35415b;
+    border-color: #9baee0;
+    color: #ffffff;
+}
+
+.twoInputGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.inListArea {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.inAddRow {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: start;
+}
+
+.inValueRow {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: start;
+}
+
+.previewWhere {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #465169;
+    background: #1e2430;
+    color: #aeb6ca;
+    font-size: 13px;
+}
+
+.previewWhere span {
+    display: block;
+    margin-top: 6px;
+    color: #ffffff;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.optionalRuleBlock {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid #465169;
+    background: #202637;
+}
+
+.optionalRuleTitle {
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: #c6ccda;
+}
+
+.bulkActionBar {
+    min-height: 42px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    border: 1px solid #59657d;
+    background: #202637;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: #d8deea;
+    font-size: 13px;
+}
+
+.dangerButtonSmall {
+    min-height: 30px;
+    padding: 0 10px;
+    border-radius: 7px;
+    border: 1px solid #985565;
+    background: #4a2430;
+    color: #ffc4cc;
+    cursor: pointer;
+}
+
+.dangerButtonSmall:hover {
+    background: #633040;
+}
+
+.selectCheckbox {
+    width: 16px;
+    height: 16px;
+    accent-color: #9baee0;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.groupIdentity {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.groupName {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.groupNameLoading {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 40px;
+}
+
+.groupId {
+    color: #aeb6ca;
+    font-size: 12px;
+    font-family: Consolas, "Courier New", monospace;
+    overflow-wrap: anywhere;
+}
+
+.groupMembers {
+    margin-top: 2px;
+    color: #8fa3cf;
+    font-size: 12px;
+}
+
+
+.groupIdCopyButton {
+    width: fit-content;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #aeb6ca;
+    font-size: 12px;
+    line-height: 1.35;
+    font-family: Consolas, "Courier New", monospace;
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+    transition: color 0.18s ease;
+}
+
+.groupIdCopyButton:hover {
+    color: #ffffff;
+    text-decoration: underline;
+}
+
+.settingNotice {
+    position: fixed;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 11000;
+    min-width: 210px;
+    padding: 11px 18px;
+    border-radius: 9px;
+    border: 1px solid #7185ae;
+    background: #273149;
+    color: #ffffff;
+    font-size: 13px;
+    text-align: center;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+    pointer-events: none;
+}
+
+.globalSettingActions {
+    flex-shrink: 0;
+    min-height: 66px;
+    padding: 13px 22px;
+    border-top: 1px solid #3a4050;
+    background: #20232c;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.saveState {
+    color: #8e96aa;
+    font-size: 13px;
+}
+
+.saveState.changed {
+    color: #f1c27d;
+}
+
+.globalSettingButtons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cancelConfigButton,
+.applyConfigButton {
+    height: 38px;
+    padding: 0 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: 0.18s ease;
+}
+
+.cancelConfigButton {
+    border: 1px solid #59657d;
+    background: #293148;
+    color: #ffffff;
+}
+
+.applyConfigButton {
+    border: 1px solid #728ac3;
+    background: #385083;
+    color: #ffffff;
+}
+
+.cancelConfigButton:hover:not(:disabled) {
+    background: #38435b;
+}
+
+.applyConfigButton:hover:not(:disabled) {
+    background: #46619a;
+}
+
+.cancelConfigButton:disabled,
+.applyConfigButton:disabled {
+    opacity: 0.45;
+    cursor: default;
+}

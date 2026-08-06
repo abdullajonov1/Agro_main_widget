@@ -1,0 +1,1759 @@
+/* ===== Regional Charts Widget - Warm Paper UI (No neon / no dark force) ===== */
+
+.agri-v11-regional-stats-card {
+  height: 100% !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+
+  background: #ffffff !important;
+
+  border-radius: 12px !important;
+  box-shadow: none;
+
+  overflow: hidden !important;
+  font-family: "Geologica", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif !important;
+  position: relative !important;
+  padding: 10px 10px 10px 8px !important;
+
+  color: #0f172a !important;
+  box-sizing: border-box !important;
+  min-height: 0 !important;
+}
+
+/* Top accent line (warm, not neon) */
+.agri-v11-regional-stats-card::before {
+  content: none !important;
+}
+
+.agri-v11-regional-stats-content {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  position: relative !important;
+  z-index: 2 !important;
+  background: transparent !important;
+  min-height: 0 !important;
+}
+
+.agri-v11-regional-stats-body {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  width: 100% !important;
+}
+
+/* Info message when year not selected */
+.agri-v11-regional-stats-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  padding: 70px 20px;
+  text-align: center;
+  color: rgba(15, 23, 42, 0.7);
+
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  margin: 14px;
+
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+}
+
+.agri-v11-regional-stats-info h3 {
+  font-size: 18px;
+  font-weight: 900;
+  margin-bottom: 10px;
+  color: rgba(15, 23, 42, 0.92);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agri-v11-regional-stats-info p {
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.6;
+  color: rgba(15, 23, 42, 0.7);
+}
+
+/* Header */
+.agri-v11-regional-stats-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 5px !important;
+  padding-left: 0 !important;
+  position: relative !important;
+  min-height: 44px !important;
+}
+
+.agri-v11-regional-stats-header-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+.agri-v11-regional-stats-navigation {
+  position: static !important;
+  display: flex !important;
+  gap: 8px !important;
+  z-index: 20 !important;
+}
+
+.agri-v11-regional-stats-header-title {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: rgba(15, 23, 42, 0.86) !important;
+  text-align: left !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Controls */
+.agri-v11-regional-stats-header-controls {
+  position: static !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  z-index: 20 !important;
+  flex-wrap: nowrap !important;
+  margin-left: auto !important;
+}
+
+/* Navigation buttons */
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 0 !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
+  color: rgba(15, 23, 42, 0.78) !important;
+  transition: color 0.2s ease !important;
+  font-weight: 400 !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-home-button {
+  background: rgba(255, 255, 255, 0.72) !important;
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+  border-radius: 999px !important;
+
+  padding: 10px 14px !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
+
+  color: rgba(15, 23, 42, 0.78) !important;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+
+  backdrop-filter: blur(12px) !important;
+  box-shadow: none;
+  height: 40px !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button:hover {
+  background: transparent !important;
+  border: none !important;
+  color: #3b82f6 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-home-button:hover {
+  background: rgba(16, 185, 129, 0.08) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: none;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button:active {
+  transform: none !important;
+  background: transparent !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-home-button:active {
+  transform: translateY(0) scale(0.99) !important;
+}
+
+/* Sort buttons group */
+.agri-v11-regional-stats-sort-buttons {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.agri-v11-regional-stats-sort-buttons:hover {
+  box-shadow: none;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button {
+  background: transparent !important;
+  border: none !important;
+  width: 28px !important;
+  height: 28px !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: rgba(15, 23, 42, 0.55) !important;
+  transition: color 0.2s ease !important;
+  padding: 0 !important;
+  border-radius: 4px !important;
+  user-select: none !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:last-child {
+  border-right: none !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:hover {
+  color: #3b82f6 !important;
+  background: transparent !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button.active {
+  color: #3b82f6 !important;
+  background: transparent !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:active {
+  transform: scale(0.96) !important;
+}
+
+/* Display count dropdown */
+.agri-v11-regional-stats-card .agri-v11-regional-stats-display-count {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+
+  padding: 10px 14px !important;
+  padding-right: 36px !important;
+
+  border: 1px solid rgba(15, 23, 42, 0.1) !important;
+  border-radius: 999px !important;
+
+  background-color: rgba(255, 255, 255, 0.72) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath fill='%2310b981' d='M1 1l6 7 6-7'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 14px 9px !important;
+
+  font-size: 12px !important;
+  font-weight: 900 !important;
+  color: rgba(15, 23, 42, 0.8) !important;
+
+  cursor: pointer !important;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease !important;
+  box-shadow: none;
+  backdrop-filter: blur(12px) !important;
+
+  min-width: 78px !important;
+  height: 40px !important;
+  text-align: center !important;
+  text-align-last: center !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-display-count:hover {
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  background-color: rgba(16, 185, 129, 0.08) !important;
+  transform: translateY(-1px) !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-display-count:focus {
+  outline: none !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  box-shadow: none;
+}
+
+/* Options */
+.agri-v11-regional-stats-card .agri-v11-regional-stats-display-count option {
+  background-color: #fafaf9 !important;
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+/* Chart scroll area */
+.agri-v11-regional-stats-chart-scroll {
+  flex: 1 1 auto !important;
+  width: 100%;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+.agri-v11-regional-stats-chart-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.agri-v11-regional-stats-chart-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.agri-v11-regional-stats-chart-scroll::-webkit-scrollbar-thumb {
+  background: rgba(158, 223, 255, 0.78);
+  border-radius: 999px;
+}
+
+.agri-v11-regional-stats-chart-scroll .recharts-tooltip-wrapper {
+  display: none !important;
+}
+
+.agri-v11-regional-stats-chart-scroll .recharts-wrapper {
+  margin-left: -8px !important;
+}
+
+.agri-v11-regional-stats-chart-scroll .recharts-wrapper,
+.agri-v11-regional-stats-chart-scroll .recharts-surface {
+  overflow: visible !important;
+}
+
+.agri-v11-regional-stats-card .recharts-layer.recharts-cartesian-axis-tick text {
+  font-size: 12px !important;
+  fill: #111111 !important;
+  font-weight: 400 !important;
+  text-anchor: end !important;
+  word-break: break-word !important;
+  overflow: visible !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light.agri-v11-region-light .recharts-layer.recharts-cartesian-axis-tick text,
+.agri-v11-regional-stats-card.agri-v11-region-light.agri-v11-region-light .recharts-layer.recharts-cartesian-axis-tick text,
+.agri-v11-regional-stats-card.agri-v11-region-light.agri-v11-region-light .recharts-layer.recharts-cartesian-axis-tick text {
+  fill: #000000 !important;
+}
+
+.agri-v11-regional-stats-card .recharts-layer.recharts-cartesian-axis-tick text tspan {
+  text-anchor: end !important;
+  overflow: visible !important;
+}
+
+.agri-v11-regional-stats-card .recharts-cartesian-grid-horizontal line {
+  stroke: rgba(15, 23, 42, 0.08) !important;
+  stroke-width: 1 !important;
+}
+
+.agri-v11-regional-stats-card .recharts-cartesian-grid-vertical line {
+  stroke: rgba(15, 23, 42, 0.06) !important;
+  stroke-width: 1 !important;
+}
+
+.agri-v11-regional-stats-card .recharts-cartesian-axis-line {
+  display: none !important;
+}
+
+/* Bars */
+.agri-v11-regional-stats-card .recharts-bar-rectangle path {
+  fill: #3b82f6 !important;
+  transition:
+    filter 0.2s ease,
+    opacity 0.2s ease !important;
+}
+
+.agri-v11-regional-stats-card .recharts-rectangle.recharts-bar-rectangle,
+.agri-v11-regional-stats-card .recharts-rectangle.recharts-bar-background-rectangle {
+  transform: none;
+}
+
+.agri-v11-regional-stats-card .recharts-bar-background-rectangle path,
+.agri-v11-regional-stats-card .recharts-rectangle.recharts-bar-background-rectangle {
+  fill: rgba(59, 130, 246, 0.16) !important;
+}
+
+.agri-v11-regional-stats-card .recharts-bar-rectangle:hover path {
+  fill: #2563eb !important;
+}
+
+.agri-v11-regional-stats-card .recharts-tooltip-cursor {
+  fill: transparent !important;
+  stroke: none !important;
+}
+
+/* Label overlay rows */
+.agri-v11-regional-labels-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.agri-v11-regional-label-row {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: auto;
+
+  padding: 0 12px;
+  height: 20px;
+
+  transition:
+    background 0.2s ease,
+    transform 0.15s ease,
+    box-shadow 0.2s ease;
+  border-radius: 10px;
+}
+
+.agri-v11-regional-name {
+  font-size: 12px !important;
+  color: rgba(15, 23, 42, 0.6) !important;
+  font-weight: 800 !important;
+
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  position: absolute;
+  left: 0;
+}
+
+.agri-v11-regional-value {
+  font-size: 12px !important;
+  font-weight: 900 !important;
+
+  position: absolute;
+  right: 8px;
+
+  color: rgba(15, 23, 42, 0.75) !important;
+}
+
+/* Hover + selected */
+.agri-v11-regional-label-row:hover {
+  background: rgba(16, 185, 129, 0.08) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: none;
+}
+
+.agri-v11-regional-label-row.selected {
+  background: rgba(245, 158, 11, 0.12) !important;
+  border-left: 3px solid rgba(245, 158, 11, 0.75) !important;
+  box-shadow: none;
+}
+
+.agri-v11-regional-label-row.selected .agri-v11-regional-name,
+.agri-v11-regional-label-row.selected .agri-v11-regional-value {
+  color: rgba(15, 23, 42, 0.9) !important;
+}
+
+/* Loading */
+.agri-v11-regional-stats-loading-container,
+.agri-v11-regional-stats-error,
+.agri-v11-regional-stats-no-data {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  padding: 0 !important;
+  text-align: center !important;
+  color: rgba(15, 23, 42, 0.72) !important;
+  background: transparent !important;
+  border-radius: 12px !important;
+  position: relative !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-loading-container,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-loading-container,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-loading-container,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-loading-container,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-loading-container p,
+.agri-v11-regional-stats-card.agri-v11-region-dark
+  .agri-v11-regional-stats-loading-container
+  p,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-loading-container p,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-loading-container p {
+  color: #e9f8ff !important;
+}
+
+.agri-v11-regional-stats-loading-container::before {
+  content: none;
+}
+
+.agri-v11-regional-stats-loading-container .jimu-loading {
+  display: none !important;
+}
+
+@keyframes agri-v11-regional-warm-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.agri-v11-regional-stats-error p {
+  color: #dc2626 !important;
+  font-weight: 900 !important;
+  font-size: 13px !important;
+  margin-bottom: 12px !important;
+}
+
+.agri-v11-regional-stats-no-data h3 {
+  color: rgba(15, 23, 42, 0.92) !important;
+  margin-bottom: 8px !important;
+  font-size: 16px !important;
+  font-weight: 900 !important;
+}
+
+.agri-v11-regional-stats-no-data p {
+  margin-bottom: 12px !important;
+  font-size: 13px !important;
+  color: rgba(15, 23, 42, 0.65) !important;
+}
+
+/* Tooltip */
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip:not(.agri-v11-regional-tooltip-cursor-follow) {
+  background: #0b1220 !important;
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 6px 8px !important;
+  box-shadow: none;
+  z-index: 50 !important;
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  transform: none !important;
+  will-change: auto !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip-title {
+  font-weight: 600 !important;
+  margin-bottom: 4px !important;
+  border-bottom: 1px solid rgba(158, 223, 255, 0.28) !important;
+  padding-bottom: 4px !important;
+  color: #ffffff !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  opacity: 1 !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  margin: 2px 0 !important;
+  min-width: 130px !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip-label {
+  color: #d7e6f5 !important;
+  margin-right: 0 !important;
+  font-weight: 500 !important;
+  font-size: 10px !important;
+  opacity: 1 !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip-value {
+  font-weight: 600 !important;
+  font-size: 10px !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+/* Map indicator (light) */
+.agri-v11-regional-stats-card .map-connection-indicator {
+  position: absolute !important;
+  top: 12px !important;
+  right: 100px !important;
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 13px !important;
+  z-index: 30 !important;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease !important;
+  box-shadow: none;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+}
+
+.agri-v11-regional-stats-card .map-connection-indicator.connected {
+  background: rgba(16, 185, 129, 0.95) !important;
+  color: #062a1e !important;
+}
+
+.agri-v11-regional-stats-card .map-connection-indicator.connecting {
+  background: rgba(245, 158, 11, 0.95) !important;
+  color: #2a1602 !important;
+  animation: agri-v11-regional-warm-spin 1s linear infinite !important;
+}
+
+.agri-v11-regional-stats-card .map-connection-indicator.loading {
+  background: rgba(59, 130, 246, 0.92) !important;
+  color: #071c38 !important;
+}
+
+.agri-v11-regional-stats-card .map-connection-indicator.failed,
+.agri-v11-regional-stats-card .map-connection-indicator.idle {
+  background: rgba(220, 38, 38, 0.92) !important;
+  color: #2a0505 !important;
+}
+
+.agri-v11-regional-stats-card .indicator-icon {
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+/* Drill hint */
+.agri-v11-regional-drill-hint {
+  position: absolute !important;
+  bottom: 8px !important;
+  left: 0 !important;
+  right: 0 !important;
+  text-align: center !important;
+  font-size: 11px !important;
+  color: rgba(15, 23, 42, 0.55) !important;
+  opacity: 0.9 !important;
+  padding: 6px !important;
+  margin-bottom: 6px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.2px !important;
+}
+
+/* Focus */
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button:focus,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-home-button:focus {
+  outline: 2px solid rgba(16, 185, 129, 0.65) !important;
+  outline-offset: 2px !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:focus,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:focus-visible,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-count-pill:focus,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-count-pill:focus-visible {
+  outline: none !important;
+  box-shadow: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .agri-v11-regional-stats-header {
+    margin-bottom: 12px !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+  }
+
+  .agri-v11-regional-stats-header-title {
+    font-size: 14px !important;
+    order: 1 !important;
+    width: 100% !important;
+    margin-bottom: 10px !important;
+  }
+
+  .agri-v11-regional-stats-navigation {
+    position: static !important;
+    order: 2 !important;
+  }
+
+  .agri-v11-regional-stats-header-controls {
+    position: static !important;
+    order: 3 !important;
+    justify-content: center !important;
+    width: 100% !important;
+  }
+
+  .agri-v11-regional-name {
+    max-width: 80px;
+    font-size: 12px !important;
+  }
+  .agri-v11-regional-value {
+    font-size: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .agri-v11-regional-stats-card {
+    padding: 10px !important;
+  }
+
+  .agri-v11-regional-stats-header-controls {
+    flex-direction: column !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+
+  .agri-v11-regional-stats-sort-buttons {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  .agri-v11-regional-stats-card .agri-v11-regional-stats-display-count {
+    width: 100% !important;
+  }
+}
+
+/* ===== AgriGraff4 parity overrides ===== */
+.agri-v11-regional-stats-card,
+.agri-v11-regional-stats-card.agri-v11-region-dark {
+  --region-bg: #030a12;
+  --region-bg-soft: #061420;
+  --region-surface: rgba(9, 28, 44, 0.74);
+  --region-border: rgba(126, 214, 255, 0.16);
+  --region-text: #e9f8ff;
+  --region-muted: #9cc7dd;
+  --region-bar-fill: #00a8e8;
+  --region-bar-track: rgba(59, 130, 246, 0.16);
+  --region-shadow: none;
+
+  background:
+    radial-gradient(
+      120% 90% at 14% 10%,
+      rgba(83, 226, 255, 0.12),
+      transparent 58%
+    ),
+    radial-gradient(
+      130% 90% at 86% 0%,
+      rgba(33, 137, 255, 0.14),
+      transparent 62%
+    ),
+    linear-gradient(156deg, var(--region-bg) 0%, var(--region-bg-soft) 100%) !important;
+  border: none !important;
+  box-shadow: none;
+  color: var(--region-text) !important;
+  padding: 10px 10px 10px 2px !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light,
+.agri-v11-regional-stats-card.agri-v11-region-light,
+.agri-v11-regional-stats-card.agri-v11-region-light,
+.agri-v11-regional-stats-card.agri-v11-region-light {
+  --region-bg: #ffffff;
+  --region-bg-soft: #ffffff;
+  --region-surface: #ffffff;
+  --region-border: rgba(61, 87, 85, 0.18);
+  --region-text: #000000;
+  --region-muted: #000000;
+  --region-bar-fill: #00a8e8;
+  --region-bar-track: rgba(59, 130, 246, 0.16);
+  --region-shadow: none;
+
+  background: #ffffff !important;
+  border: none !important;
+}
+
+.agri-v11-regional-stats-content {
+  padding: 0 !important;
+  background: transparent !important;
+  color: var(--region-text) !important;
+}
+
+.agri-v11-regional-stats-header {
+  margin-bottom: 8px !important;
+}
+
+.agri-v11-regional-stats-header-title {
+  color: var(--region-text) !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-home-button {
+  width: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
+  height: 40px !important;
+  padding: 0 !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(123, 220, 255, 0.28) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(15, 45, 67, 0.78),
+    rgba(8, 28, 44, 0.78)
+  ) !important;
+  color: #cfefff !important;
+  box-shadow: none;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-home-button:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(26, 73, 103, 0.95),
+    rgba(13, 49, 74, 0.95)
+  ) !important;
+  color: #9edfff !important;
+  border-color: rgba(158, 223, 255, 0.88) !important;
+}
+
+.agri-v11-regional-control-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  margin: 0 auto;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.agri-v11-regional-stats-sort-buttons {
+  border-radius: 10px !important;
+  border: 1px solid rgba(123, 220, 255, 0.28) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(15, 45, 67, 0.78),
+    rgba(8, 28, 44, 0.78)
+  ) !important;
+  box-shadow: none;
+  height: 40px !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button {
+  width: 40px !important;
+  height: 40px !important;
+  color: #cfefff !important;
+  border-right: 1px solid rgba(123, 220, 255, 0.2) !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:hover {
+  color: #3b82f6 !important;
+  background: transparent !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button.active {
+  background: transparent !important;
+  color: #3b82f6 !important;
+  border-color: transparent !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-display-count {
+  border-radius: 10px !important;
+  border: 1px solid rgba(123, 220, 255, 0.28) !important;
+  background-color: rgba(15, 45, 67, 0.78) !important;
+  color: #cfefff !important;
+  box-shadow: none;
+  height: 40px !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-display-count:hover {
+  border-color: rgba(158, 223, 255, 0.88) !important;
+  background-color: rgba(26, 73, 103, 0.78) !important;
+}
+
+/* ===== Strong adaptive responsiveness ===== */
+.agri-v11-regional-stats-card {
+  min-width: 0;
+}
+
+.agri-v11-regional-stats-header {
+  min-height: 40px !important;
+  align-items: center !important;
+  gap: clamp(6px, 1.6vw, 10px) !important;
+}
+
+.agri-v11-regional-stats-header-left {
+  min-width: 0 !important;
+  align-items: center !important;
+}
+
+.agri-v11-regional-stats-header-title {
+  font-size: 14px !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  overflow-wrap: normal !important;
+  line-height: 1.25 !important;
+}
+
+.agri-v11-regional-stats-header-controls {
+  gap: clamp(6px, 1.4vw, 10px) !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+}
+
+.agri-v11-regional-stats-chart-scroll {
+  min-height: 0 !important;
+}
+
+@media (max-width: 900px) {
+  .agri-v11-regional-stats-header-title {
+    max-width: none !important;
+  }
+
+  .agri-v11-regional-stats-card .agri-v11-regional-stats-back-button,
+  .agri-v11-regional-stats-sort-buttons,
+  .agri-v11-regional-stats-card .agri-v11-regional-stats-display-count {
+    height: 36px !important;
+  }
+
+  .agri-v11-regional-stats-card .agri-v11-regional-stats-back-button,
+  .agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button {
+    width: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+  }
+
+  .agri-v11-regional-control-icon {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+@media (max-width: 680px) {
+  .agri-v11-regional-stats-header {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
+
+  .agri-v11-regional-stats-navigation,
+  .agri-v11-regional-stats-header-controls {
+    position: static !important;
+  }
+
+  .agri-v11-regional-stats-navigation {
+    order: 1 !important;
+  }
+
+  .agri-v11-regional-stats-header-title {
+    order: 2 !important;
+    width: 100% !important;
+    max-width: 100%;
+    text-align: center !important;
+  }
+
+  .agri-v11-regional-stats-header-controls {
+    order: 3 !important;
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 460px) {
+  .agri-v11-regional-stats-card {
+    padding: 8px !important;
+  }
+
+  .agri-v11-regional-stats-header-controls {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .agri-v11-regional-stats-sort-buttons,
+  .agri-v11-regional-stats-card .agri-v11-regional-stats-display-count {
+    width: 100% !important;
+  }
+
+  .agri-v11-regional-stats-sort-buttons {
+    justify-content: stretch !important;
+  }
+
+  .agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button {
+    flex: 1 1 50% !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+
+  .agri-v11-regional-stats-chart-scroll {
+    min-height: 0 !important;
+  }
+}
+
+.agri-v11-regional-stats-chart-scroll {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.agri-v11-regional-stats-card .recharts-layer.recharts-cartesian-axis-tick text {
+  fill: var(--region-text) !important;
+}
+
+.agri-v11-regional-stats-card .recharts-bar-rectangle path {
+  fill: var(--region-bar-fill) !important;
+}
+
+.agri-v11-regional-stats-card .recharts-bar-rectangle:hover path {
+  fill: var(--region-bar-fill) !important;
+}
+
+/* ===== AgriRegion5 compact/plain controls + typography ===== */
+.agri-v11-regional-stats-header {
+  min-height: 32px !important;
+  margin-bottom: 5px !important;
+}
+
+.agri-v11-regional-stats-header-title {
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  font-size: 14px !important;
+}
+
+.agri-v11-regional-stats-card,
+.agri-v11-regional-stats-card * {
+  font-weight: 400 !important;
+}
+
+/* Header title must stay bold */
+.agri-v11-regional-stats-header-title {
+  font-weight: 700 !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-display-count {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none;
+  backdrop-filter: none !important;
+  height: 32px !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-home-button {
+  width: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  border-radius: 0 !important;
+}
+
+.agri-v11-regional-control-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.agri-v11-regional-stats-sort-buttons {
+  border-radius: 0 !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button {
+  width: 32px !important;
+  height: 32px !important;
+  border-right: none !important;
+  font-size: 20px !important;
+  color: rgba(233, 248, 255, 0.52) !important;
+  opacity: 0.75 !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button.active,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:hover,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-home-button:hover {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
+  transform: none !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button.active {
+  color: #3b82f6 !important;
+  opacity: 1 !important;
+  text-shadow: none;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-display-count {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  padding: 4px 20px 4px 6px !important;
+  min-width: 54px !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%239edfff' d='M1 1l5 6 5-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 4px center !important;
+  background-size: 12px 8px !important;
+}
+
+.agri-v11-regional-stats-chart-scroll:focus,
+.agri-v11-regional-stats-chart-scroll:focus-within,
+.agri-v11-regional-stats-chart-scroll .recharts-wrapper:focus,
+.agri-v11-regional-stats-chart-scroll .recharts-surface:focus,
+.agri-v11-regional-stats-chart-scroll .recharts-layer:focus,
+.agri-v11-regional-stats-chart-scroll .recharts-rectangle:focus {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip.agri-v11-regional-tooltip-cursor-follow {
+  position: absolute !important;
+  left: 0;
+  top: 0;
+  z-index: 600 !important;
+  pointer-events: none !important;
+  margin: 0 !important;
+  max-width: calc(100% - 20px) !important;
+  box-sizing: border-box !important;
+  background: #0b1220 !important;
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 6px 8px !important;
+  box-shadow: none;
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  /* Position is driven by left/top in JS — never freeze transform. */
+  transform: none !important;
+  transition: none !important;
+  will-change: left, top !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip.agri-v11-regional-tooltip-cursor-follow {
+  font-size: 10px !important;
+  background: #0b1220 !important;
+  border: none !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  box-shadow: none;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transform: none !important;
+  will-change: auto !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip.agri-v11-regional-tooltip-above {
+  transform: none;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip.agri-v11-regional-tooltip-below {
+  transform: none;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip-title {
+  font-size: 11px !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  border-bottom-color: rgba(158, 223, 255, 0.28) !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip-label {
+  color: #d7e6f5 !important;
+  font-size: 10px !important;
+  opacity: 1 !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-tooltip-value {
+  color: #ffffff !important;
+  font-size: 10px !important;
+  opacity: 1 !important;
+}
+
+.agri-v11-regional-stats-card .recharts-layer.recharts-cartesian-axis-tick text,
+.agri-v11-regional-stats-card .recharts-label-list text,
+.agri-v11-regional-stats-card .recharts-text.recharts-label {
+  font-size: 12px !important;
+  font-weight: 400 !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip {
+  background: #ffffff !important;
+  border: none !important;
+  color: #0f172a !important;
+  opacity: 1 !important;
+  box-shadow: none;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-title,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-title,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-title,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-title {
+  color: #0f172a !important;
+  opacity: 1 !important;
+  border-bottom-color: rgba(15, 23, 42, 0.14) !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-label,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-label,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-label,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-label {
+  color: #334155 !important;
+  opacity: 1 !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-value,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-value,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-value,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-tooltip-value {
+  color: #0f172a !important;
+  opacity: 1 !important;
+}
+
+.agri-v11-regional-name,
+.agri-v11-regional-value,
+.agri-v11-regional-drill-hint,
+.agri-v11-regional-stats-info p,
+.agri-v11-regional-stats-no-data p {
+  color: var(--region-muted) !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count {
+  background: #cadede !important;
+  border-color: #cadede !important;
+  color: #425c5a !important;
+  box-shadow: none;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light
+  .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button.active,
+.agri-v11-regional-stats-card.agri-v11-region-light
+  .agri-v11-regional-stats-sort-button.active,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button.active,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button.active {
+  background: transparent !important;
+  border: none !important;
+  color: #3b82f6 !important;
+}
+
+/* Keep controls plain in all themes */
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-display-count {
+  background-color: transparent !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%239edfff' d='M1 1l5 6 5-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 4px center !important;
+  background-size: 12px 8px !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count {
+  border-radius: 8px !important;
+  color: #425c5a !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons {
+  border-radius: 8px !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-home-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button:hover {
+  background: #cadede !important;
+  color: #425c5a !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light
+  .agri-v11-regional-stats-sort-buttons:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-buttons:hover {
+  background: transparent !important;
+  box-shadow: none;
+  border-color: transparent !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light
+  .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count:hover {
+  background-color: #cadede !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23425c5a' d='M1 1l5 6 5-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 4px center !important;
+  background-size: 12px 8px !important;
+  color: #425c5a !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card.agri-v11-region-dark
+  .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-display-count:hover,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-display-count:hover {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%239edfff' d='M1 1l5 6 5-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 4px center !important;
+  background-size: 12px 8px !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button {
+  border-right: none !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button.active,
+.agri-v11-regional-stats-card.agri-v11-region-light
+  .agri-v11-regional-stats-sort-button.active,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button.active,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button.active {
+  background: transparent !important;
+  color: #3b82f6 !important;
+  text-shadow: none;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-display-count {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23425c5a' d='M1 1l5 6 5-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 4px center !important;
+  background-size: 12px 8px !important;
+}
+
+/* ===== AgriDashboard region card controls refresh ===== */
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-header-title,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-header-title {
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #e9f8ff !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-header-controls,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-header-controls {
+  gap: 10px !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  margin-left: auto !important;
+}
+
+.agri-v11-regional-stats-count-filter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.agri-v11-regional-stats-count-menu {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  transform-origin: right center;
+}
+
+.agri-v11-regional-stats-count-pill.is-collapsed {
+  max-width: 0;
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  margin: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    max-width 0.18s ease,
+    opacity 0.15s ease,
+    padding 0.18s ease,
+    margin 0.18s ease;
+}
+
+.agri-v11-regional-stats-count-filter.is-open .agri-v11-regional-stats-count-pill.is-collapsed {
+  max-width: 48px;
+  min-width: 34px;
+  padding: 0 12px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-sort-button.is-neutral,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:not(.active) {
+  color: rgba(233, 248, 255, 0.52) !important;
+}
+
+.agri-v11-regional-stats-count-pill {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #a9b6ca;
+  font-size: 12px !important;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  outline: none;
+  box-shadow: none;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    max-width 0.18s ease,
+    opacity 0.15s ease,
+    padding 0.18s ease;
+}
+
+.agri-v11-regional-stats-count-pill:hover {
+  color: #e9f8ff;
+  background: rgba(58, 88, 133, 0.24);
+}
+
+.agri-v11-regional-stats-count-filter.is-open .agri-v11-regional-stats-count-pill {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.agri-v11-regional-stats-count-filter.is-open .agri-v11-regional-stats-count-pill.is-active {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.agri-v11-regional-stats-count-filter.is-open .agri-v11-regional-stats-count-pill:hover {
+  background: rgba(59, 130, 246, 0.25);
+  color: #3b82f6;
+}
+
+.agri-v11-regional-stats-count-pill.is-active,
+.agri-v11-regional-stats-count-trigger.is-active {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.agri-v11-regional-stats-count-pill.is-active:hover,
+.agri-v11-regional-stats-count-trigger.is-active:hover {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-sort-buttons,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-buttons {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  height: auto !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none;
+  overflow: visible !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-sort-button,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button {
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: rgba(233, 248, 255, 0.72) !important;
+  opacity: 1 !important;
+  box-shadow: none;
+  outline: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-sort-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-sort-button:hover,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:hover {
+  color: #3b82f6 !important;
+  background: transparent !important;
+  transform: none !important;
+  text-shadow: none;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-sort-button.active,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button.active {
+  color: #3b82f6 !important;
+  background: transparent !important;
+  text-shadow: none;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-header-title {
+  color: #000000 !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-count-menu {
+  background: transparent;
+  border: none;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-count-pill {
+  color: #425c5a;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-count-filter.is-open .agri-v11-regional-stats-count-pill {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-count-filter.is-open .agri-v11-regional-stats-count-pill.is-active {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-count-pill.is-active,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-count-trigger.is-active {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button {
+  color: rgba(15, 23, 42, 0.55) !important;
+}
+
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button.active {
+  color: #3b82f6 !important;
+}
+
+/* Print */
+@media print {
+  .agri-v11-regional-stats-card {
+    background: white !important;
+    color: black !important;
+    box-shadow: none;
+  }
+
+  .agri-v11-regional-stats-card::before {
+    display: none !important;
+  }
+  .agri-v11-regional-stats-header-controls,
+  .agri-v11-regional-stats-card .map-connection-indicator,
+  .agri-v11-regional-stats-card .agri-v11-regional-stats-back-button,
+  .agri-v11-regional-stats-card .agri-v11-regional-stats-home-button {
+    display: none !important;
+  }
+
+  .agri-v11-regional-name,
+  .agri-v11-regional-value {
+    color: black !important;
+  }
+}
+
+@media (min-width: 1080px) and (max-width: 1400px) and (min-height: 780px) and (max-aspect-ratio: 3/2),
+  (min-width: 1080px) and (max-width: 1400px) and (max-height: 910px) and (min-height: 500px) {
+  /* Left region labels in Viloyat kesimida chart */
+  .agri-v11-regional-name {
+    font-size: 10px !important;
+  }
+
+  .agri-v11-regional-stats-card .recharts-layer.recharts-cartesian-axis-tick text,
+  .agri-v11-regional-stats-card .recharts-layer.recharts-cartesian-axis-tick text tspan {
+    font-size: 10px !important;
+  }
+}
+
+/* Final card radius lock */
+.agri-v11-regional-stats-card,
+.agri-v11-regional-stats-card.agri-v11-region-dark,
+.agri-v11-regional-stats-card.agri-v11-region-light {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+/* Back button: icon-only, no hover/focus chrome */
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-back-button {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button:focus,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button:focus-visible,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-back-button:active,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:focus,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:focus-visible,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-back-button:active {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transform: none !important;
+  color: #3b82f6 !important;
+}
+
+/* Sort button: icon-only, no hover/focus chrome */
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-sort-button {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:hover,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:focus,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:focus-visible,
+.agri-v11-regional-stats-card .agri-v11-regional-stats-sort-button:active,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button:focus,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button:focus-visible,
+.agri-v11-regional-stats-card.agri-v11-region-light .agri-v11-regional-stats-sort-button:active,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-sort-button:hover,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-sort-button:focus,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-sort-button:focus-visible,
+.agri-v11-regional-stats-card.agri-v11-region-dark .agri-v11-regional-stats-sort-button.active {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transform: none !important;
+  color: #3b82f6 !important;
+}
+
+/* Chart fills available body height */
+.agri-v11-regional-stats-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+}
+
+.agri-v11-regional-stats-chart-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: none !important;
+  margin-left: -2px !important;
+  padding-left: 0 !important;
+}

@@ -1,0 +1,346 @@
+/* ===== AgriIndicator3 — AgriPie3 Design Parity ===== */
+
+/* ── Make ExB widget host containers transparent so border-radius shows cleanly ── */
+.widget-content,
+.widget-placeholder,
+.widget-renderer,
+.widget-inner-content {
+  background: transparent !important;
+  overflow: visible !important;
+}
+
+/* ── CSS variables: dark (default) ── */
+.vegetation-stats-widget,
+.vegetation-stats-widget.dark-theme {
+  --ind-bg: #030a12;
+  --ind-bg-soft: #061420;
+  --ind-border: rgba(126, 214, 255, 0.16);
+  --ind-text: #e9f8ff;
+  --ind-muted: #9cc7dd;
+  --ind-shadow: none;
+  --ind-icon-bg: rgba(9, 28, 44, 0.74);
+  --ind-icon-border: rgba(126, 214, 255, 0.18);
+
+  background:
+    radial-gradient(
+      120% 90% at 14% 10%,
+      rgba(83, 226, 255, 0.12),
+      transparent 58%
+    ),
+    radial-gradient(
+      130% 90% at 86% 0%,
+      rgba(33, 137, 255, 0.14),
+      transparent 62%
+    ),
+    linear-gradient(156deg, var(--ind-bg) 0%, var(--ind-bg-soft) 100%) !important;
+  border-radius: 12px !important;
+  border: none !important;
+  box-shadow: none;
+  color: var(--ind-text) !important;
+}
+
+/* ── CSS variables: light ── */
+html.light-theme .vegetation-stats-widget,
+html[data-theme="light"] .vegetation-stats-widget,
+body.light-theme .vegetation-stats-widget,
+.vegetation-stats-widget.light-theme {
+  --ind-bg: #ffffff;
+  --ind-bg-soft: #ffffff;
+  --ind-border: rgba(61, 87, 85, 0.18);
+  --ind-text: #000000;
+  --ind-muted: #000000;
+  --ind-shadow: none;
+  --ind-icon-bg: rgba(61, 87, 85, 0.1);
+  --ind-icon-border: rgba(61, 87, 85, 0.14);
+
+  background: #ffffff !important;
+  border: none !important;
+  box-shadow: none;
+  color: var(--ind-text) !important;
+}
+
+/* ── Layout ── */
+.vegetation-stats-widget {
+  border-radius: 12px;
+  padding: 8px;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+
+  font-family:
+    "Geologica", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  min-height: 0;
+  height: 100%;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  /* force GPU compositing so border-radius clips correctly */
+  transform: translateZ(0);
+  isolation: isolate;
+  box-sizing: border-box;
+}
+
+/* ── Icon block ── */
+.vegetation-stats-widget .widget-icon {
+  display: none;
+}
+
+.vegetation-stats-widget .vegetation-icon {
+  max-width: 56%;
+  max-height: 56%;
+  color: var(--ind-text);
+  opacity: 0.88;
+  width: auto;
+  height: auto;
+}
+
+/* ── Content ── */
+.vegetation-stats-widget .widget-content {
+  padding-left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(0px, 2vw, 4px);
+  overflow: hidden;
+  text-align: center;
+}
+
+.vegetation-stats-widget .stat-main {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.vegetation-stats-widget .stat-label {
+  font-size: 14px;
+  margin-bottom: 8px;
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  color: var(--ind-muted) !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-align: center;
+}
+
+.vegetation-stats-widget .stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.4px;
+  color: var(--ind-text) !important;
+  text-align: center;
+}
+
+.vegetation-stats-widget .unit {
+  font-weight: 600;
+  margin-left: clamp(2px, 1vw, 5px);
+  font-size: 22px;
+  color: var(--ind-text);
+  display: inline;
+}
+
+/* ── Group caption ── */
+.vegetation-stats-widget .group-caption {
+  margin-top: 6px;
+  padding-left: 2px;
+  color: var(--ind-muted);
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.vegetation-stats-widget .group-caption small {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--ind-icon-bg);
+  border: 1px solid var(--ind-icon-border);
+  box-shadow: none;
+  font-size: 11px;
+  color: var(--ind-muted);
+}
+
+/* ── Loading ── */
+.vegetation-stats-widget .loading-indicator {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 65px;
+  padding-left: 0;
+  z-index: 2;
+}
+
+.vegetation-stats-widget .loading-spinner {
+  display: none !important;
+}
+
+.vegetation-stats-widget .loading-dot {
+  display: none !important;
+}
+
+/* ── Error ── */
+.vegetation-stats-widget .error-container {
+  text-align: center;
+  padding: 10px 8px;
+  padding-left: 8px;
+  color: var(--ind-muted);
+  z-index: 2;
+}
+
+.vegetation-stats-widget .error-icon {
+  color: rgba(220, 38, 38, 0.9);
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+.vegetation-stats-widget .retry-button {
+  margin-top: 8px;
+  padding: 8px 14px;
+  background: rgba(256, 256, 256, 0.12);
+  color: var(--ind-text);
+  border: 1px solid var(--ind-border);
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  transition: filter 0.2s ease;
+}
+
+.vegetation-stats-widget .retry-button:hover {
+  filter: brightness(1.15);
+}
+
+/* ── Meta info ── */
+.vegetation-stats-widget .meta-info {
+  display: none;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ind-muted);
+}
+
+.vegetation-stats-widget .meta-info.visible {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Animations ── */
+@keyframes veg-bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE — data-ind-size attribute
+   xs  < 180px   (very narrow — stacked)
+   sm  180–260px (compact horizontal)
+   md  260–340px (moderate)
+   lg  ≥ 340px   (full, default)
+════════════════════════════════════════════ */
+
+/* ── LG (≥ 340px) — already covered by base rules ── */
+
+/* ── MD (260–339px) ── */
+.vegetation-stats-widget[data-ind-size="md"] .group-caption {
+  margin-top: clamp(4px, 1vw, 6px);
+}
+.vegetation-stats-widget[data-ind-size="md"] .meta-info.visible {
+  margin-top: clamp(4px, 1vw, 8px);
+  font-size: clamp(9px, 1.8vw, 11px);
+}
+
+/* ── SM (180–259px) ── */
+.vegetation-stats-widget[data-ind-size="sm"] .group-caption {
+  display: none;
+}
+.vegetation-stats-widget[data-ind-size="sm"] .meta-info.visible {
+  display: none;
+}
+
+/* ── XS (< 180px) — stacked vertical layout ── */
+.vegetation-stats-widget[data-ind-size="xs"] {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.vegetation-stats-widget[data-ind-size="xs"] .widget-icon {
+  position: static;
+  transform: none;
+  width: clamp(28px, 10vw, 32px);
+  height: clamp(28px, 10vw, 32px);
+  margin: 0 auto clamp(4px, 1.5vw, 8px);
+}
+.vegetation-stats-widget[data-ind-size="xs"] .widget-content,
+.vegetation-stats-widget[data-ind-size="xs"] .loading-indicator,
+.vegetation-stats-widget[data-ind-size="xs"] .error-container {
+  padding-left: 0;
+  text-align: center;
+  width: 100%;
+}
+.vegetation-stats-widget[data-ind-size="xs"] .stat-label {
+  text-align: center;
+}
+.vegetation-stats-widget[data-ind-size="xs"] .group-caption {
+  display: none;
+}
+.vegetation-stats-widget[data-ind-size="xs"] .meta-info.visible {
+  display: none;
+}
+
+/* Dashboard map overlay — centered compact card */
+.vegetation-stats-widget.map-overlay-mode {
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  height: 100% !important;
+  border-radius: 10px !important;
+}
+
+.vegetation-stats-widget.map-overlay-mode .widget-content {
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+}
+
+.vegetation-stats-widget.map-overlay-mode .stat-main {
+  align-items: center !important;
+  text-align: center !important;
+}
+
+.vegetation-stats-widget.map-overlay-mode .stat-label {
+  text-align: center !important;
+  font-size: 14px !important;
+  color: var(--ind-muted) !important;
+}
+
+.vegetation-stats-widget.map-overlay-mode .stat-value,
+.vegetation-stats-widget.map-overlay-mode .unit {
+  text-align: center !important;
+  font-size: 22px !important;
+  color: var(--ind-text) !important;
+}

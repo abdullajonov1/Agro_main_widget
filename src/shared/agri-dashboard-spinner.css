@@ -1,0 +1,83 @@
+.agri-dashboard-spinner {
+  --loader-inset: 28px;
+  --loader-color: #3b82f6;
+  display: block;
+  width: 52px;
+  height: 52px;
+  aspect-ratio: 1;
+  position: relative;
+  color: var(--loader-color);
+  flex-shrink: 0;
+}
+
+.agri-dashboard-spinner--compact {
+  --loader-inset: 22px;
+  width: 40px;
+  height: 40px;
+}
+
+.agri-dashboard-spinner::before,
+.agri-dashboard-spinner::after {
+  content: "";
+  position: absolute;
+  border-radius: 50px;
+  box-shadow: 0 0 0 3px inset var(--loader-color);
+  animation: agri-dashboard-loader-l4 2.5s infinite;
+}
+
+.agri-dashboard-spinner::after {
+  animation-delay: -1.25s;
+}
+
+.agri-dashboard-spinner__svg,
+.agri-dashboard-spinner__piece {
+  display: none;
+}
+
+@keyframes agri-dashboard-loader-l4 {
+  0% {
+    inset: 0 var(--loader-inset) var(--loader-inset) 0;
+  }
+  12.5% {
+    inset: 0 var(--loader-inset) 0 0;
+  }
+  25% {
+    inset: var(--loader-inset) var(--loader-inset) 0 0;
+  }
+  37.5% {
+    inset: var(--loader-inset) 0 0 0;
+  }
+  50% {
+    inset: var(--loader-inset) 0 0 var(--loader-inset);
+  }
+  62.5% {
+    inset: 0 0 0 var(--loader-inset);
+  }
+  75% {
+    inset: 0 0 var(--loader-inset) var(--loader-inset);
+  }
+  87.5% {
+    inset: 0 0 var(--loader-inset) 0;
+  }
+  100% {
+    inset: 0 var(--loader-inset) var(--loader-inset) 0;
+  }
+}
+
+.agri-v11-regional-stats-loading-container .agri-dashboard-spinner,
+.land-category-loading-container .agri-dashboard-spinner,
+.kadastr-status-loading-container .agri-dashboard-spinner,
+.construction-years-no-data .agri-dashboard-spinner,
+.loading-indicator .agri-dashboard-spinner,
+.agri-v11-regional-stats-loading-container .agri-dashboard-loader,
+.land-category-loading-container .agri-dashboard-loader,
+.kadastr-status-loading-container .agri-dashboard-loader,
+.construction-years-no-data .agri-dashboard-loader,
+.loading-indicator .agri-dashboard-loader {
+  margin: 0 auto;
+}
+
+.agri-v11-regional-modern-loader,
+.agri-v11-regional-modern-loader-dot {
+  display: none !important;
+}

@@ -1,0 +1,76 @@
+.agri-chart-loader {
+  --chart-loader-color: #3b82f6;
+  --chart-loader-scale: 1;
+
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none;
+}
+
+.agri-chart-loader .loader {
+  width: 65px;
+  aspect-ratio: 1;
+  position: relative;
+  transform: scale(var(--chart-loader-scale, 1));
+  transform-origin: center center;
+}
+
+.agri-chart-loader .loader::before,
+.agri-chart-loader .loader::after {
+  content: "";
+  position: absolute;
+  border-radius: 50px;
+  box-shadow: 0 0 0 3px inset var(--chart-loader-color);
+  animation: agri-chart-loader-spin 2.5s infinite;
+}
+
+.agri-chart-loader .loader::after {
+  animation-delay: -1.25s;
+}
+
+@keyframes agri-chart-loader-spin {
+  0% {
+    inset: 0 35px 35px 0;
+  }
+  12.5% {
+    inset: 0 35px 0 0;
+  }
+  25% {
+    inset: 35px 35px 0 0;
+  }
+  37.5% {
+    inset: 35px 0 0 0;
+  }
+  50% {
+    inset: 35px 0 0 35px;
+  }
+  62.5% {
+    inset: 0 0 0 35px;
+  }
+  75% {
+    inset: 0 0 35px 35px;
+  }
+  87.5% {
+    inset: 0 0 35px 0;
+  }
+  100% {
+    inset: 0 35px 35px 0;
+  }
+}
+
+.agri-v11-regional-stats-loading-container {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.agri-v11-regional-stats-loading-container .agri-chart-loader {
+  position: absolute;
+}

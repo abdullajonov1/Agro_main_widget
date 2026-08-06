@@ -1,0 +1,28 @@
+{
+  "name": "Agro_monitoring",
+  "label": "Agro_monitoring",
+  "type": "widget",
+  "version": "1.0.1",
+  "exbVersion": "1.16.0",
+  "author": "Custom Developer",
+  "description": "Self-contained Space Agro Monitoring dashboard with embedded AgriLocalization, AgriRegion10, AgriIndicator10, AgriPie10, AgriGraff10, AgriBar10, and AgriPopup (no dependency on standalone Agri3 widgets)",
+  "copyright": "",
+  "license": "",
+  "properties": {},
+  "translatedLocales": [
+    "en"
+  ],
+  "defaultSize": {
+    "width": 1920,
+    "height": 920
+  },
+  "supports": {
+    "map": true
+  },
+  "dependency": [
+    "jimu-arcgis"
+  ],
+  "supportInlineEditing": true,
+  "hasSettingPage": true,
+  "useDataSources": true
+}

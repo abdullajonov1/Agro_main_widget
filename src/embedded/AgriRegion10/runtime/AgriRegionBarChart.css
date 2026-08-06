@@ -1,0 +1,112 @@
+.agri-region-bar-chart {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  gap: 6px;
+}
+
+.agri-region-bar-chart__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.agri-region-bar-chart__row--dimmed .agri-region-bar-chart__fill {
+  opacity: 0.4;
+}
+
+.agri-region-bar-chart__name {
+  flex: 0 0 var(--bar-chart-name-width);
+  width: var(--bar-chart-name-width);
+  max-width: var(--bar-chart-name-width);
+  min-width: 0;
+  margin-right: 0;
+  padding-left: 10px;
+  padding-right: 2px;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--region-text, #111111);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.15;
+  text-align: right;
+}
+
+.agri-region-bar-chart__name-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agri-region-bar-chart__chart {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+}
+
+.agri-region-bar-chart__track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  background: var(--region-bar-track, rgba(59, 130, 246, 0.16));
+  overflow: hidden;
+}
+
+.agri-region-bar-chart__fill-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+  max-width: 100%;
+  transition: width 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.agri-region-bar-chart__fill {
+  flex: 1 1 auto;
+  height: 100%;
+  min-width: 14px;
+  border-radius: 8px;
+  background: #3b82f6;
+  transition: opacity 280ms ease;
+}
+
+.agri-region-bar-chart__value {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  white-space: nowrap;
+  color: var(--region-text, #111111);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+/* iPad / short windows: smaller left region names */
+@media (min-width: 1080px) and (max-width: 1400px) and (min-height: 780px) and (max-aspect-ratio: 3/2),
+  (min-width: 1080px) and (max-width: 1400px) and (max-height: 910px) and (min-height: 500px) {
+  .agri-region-bar-chart__name,
+  .agri-region-bar-chart__name-line {
+    font-size: 10px !important;
+  }
+}
