@@ -645,7 +645,7 @@ interface AgriGraffWidgetState {
   vegetationError: string | null;
   /** Remount SVG series to replay draw animation after data morph (Agrobank-style). */
   chartAnimKey: number;
-  selectedIndices: Array<"ndvi" | "savi" | "rvi" | "ci" | "evi" | "ndwi">;
+  selectedIndices: VegetationIndiceType[];
   chartTooltip: {
     indexKey: "ndvi" | "savi" | "rvi" | "ci" | "evi" | "ndwi";
     point: {
@@ -658,7 +658,7 @@ interface AgriGraffWidgetState {
     };
   } | null;
   selectedNdviDate?: string | null;
-  selectedChartIndexKey?: "ndvi" | "savi" | "rvi" | "ci" | "evi" | "ndwi" | null;
+  selectedChartIndexKey?: VegetationIndiceType | null;
 
   /** Dates available for the selected polygon, from api-agri's /available-dates. */
   polygonAvailableDates: string[];
@@ -4156,6 +4156,10 @@ export default class AgriGraffWidget extends React.PureComponent<
       "resetAllFilters",
       this.handleResetAll as EventListener,
     );
+    document.addEventListener(
+      "graffDateIndexNavigate",
+      this.handleDateIndexNavigate as EventListener,
+    );
 
     this._onReset = () => {
       if (!this._isMounted) return;
@@ -4333,7 +4337,9 @@ export default class AgriGraffWidget extends React.PureComponent<
     if (
       prevState.selectedNdviDate !== this.state.selectedNdviDate ||
       prevState.selectedChartIndexKey !== this.state.selectedChartIndexKey ||
-      prevState.vegetationData !== this.state.vegetationData
+      prevState.vegetationData !== this.state.vegetationData ||
+      prevState.selecteduniqueid !== this.state.selecteduniqueid ||
+      prevState.polygonAvailableDates !== this.state.polygonAvailableDates
     ) {
       this.broadcastDateIndexSelection();
     }
@@ -4348,7 +4354,13 @@ export default class AgriGraffWidget extends React.PureComponent<
     try {
       document.dispatchEvent(
         new CustomEvent("graffDateIndexSelectionChanged", {
-          detail: { date: null, indexKey: null, value: null },
+          detail: {
+            date: null,
+            indexKey: null,
+            value: null,
+            availableDates: [],
+            navigable: false,
+          },
           bubbles: true,
         }),
       );
@@ -4393,6 +4405,10 @@ export default class AgriGraffWidget extends React.PureComponent<
     document.removeEventListener(
       "resetAllFilters",
       this.handleResetAll as EventListener,
+    );
+    document.removeEventListener(
+      "graffDateIndexNavigate",
+      this.handleDateIndexNavigate as EventListener,
     );
     document.removeEventListener(
       "categoryFilterChanged",
@@ -5760,6 +5776,10 @@ export default class AgriGraffWidget extends React.PureComponent<
     this._tableDataRequestId++;
     this._hasCompletedTableFetch = true;
     const hadData = (this.state.vegetationData?.length || 0) > 0;
+    const canReusePolygonGraph =
+      !!this.state.selecteduniqueid &&
+      hadData &&
+      !this.state.vegetationError;
     // Cold-start loader only when there is no previous series (Agrobank morph).
     if (!hadData) this._hasCompletedGraphFetch = false;
     this.setState(
@@ -5768,11 +5788,26 @@ export default class AgriGraffWidget extends React.PureComponent<
         error: null,
         vegetationError: null,
         loading: false,
-        loadingVegetation: true,
+        // Keep previous series + selected date visible when data is already loaded.
+        loadingVegetation: canReusePolygonGraph ? false : !hadData,
         isMonthPickerOpen: false,
       },
       () => {
         if (this.state.viewMode !== "graph") return;
+        if (canReusePolygonGraph) {
+          this._hasCompletedGraphFetch = true;
+          const date = this.state.selectedNdviDate;
+          const indexKey = (this.state.selectedChartIndexKey ||
+            "ndvi") as VegetationIndiceType;
+          if (date && this.state.selecteduniqueid) {
+            void this.applyVegetationImageOverlay(
+              this.state.selecteduniqueid,
+              date,
+              indexKey,
+            );
+          }
+          return;
+        }
         if (this.state.selecteduniqueid) {
           this.fetchVegetationData();
         } else {
@@ -6070,8 +6105,19 @@ export default class AgriGraffWidget extends React.PureComponent<
    * change, for any reason (chart click, polygon switch/clear, deselect).
    */
   private broadcastDateIndexSelection = (): void => {
-    const { selectedNdviDate, selectedChartIndexKey, vegetationData, language } =
-      this.state;
+    const {
+      selectedNdviDate,
+      selectedChartIndexKey,
+      vegetationData,
+      language,
+      selecteduniqueid,
+      polygonAvailableDates,
+    } = this.state;
+
+    const navigable = Boolean(selecteduniqueid);
+    const availableDates = navigable
+      ? this.getNavigableDateIndexDates()
+      : [];
 
     if (!selectedNdviDate || !selectedChartIndexKey) {
       AgriGraffWidget.graffLog('chartPoint:indicator-broadcast-clear', {
@@ -6080,7 +6126,14 @@ export default class AgriGraffWidget extends React.PureComponent<
       });
       document.dispatchEvent(
         new CustomEvent("graffDateIndexSelectionChanged", {
-          detail: { date: null, indexKey: null, value: null, language },
+          detail: {
+            date: null,
+            indexKey: null,
+            value: null,
+            language,
+            availableDates: [],
+            navigable: false,
+          },
           bubbles: true,
         }),
       );
@@ -6100,7 +6153,7 @@ export default class AgriGraffWidget extends React.PureComponent<
       const ymd =
         this.resolveAgainstAvailableDates(
           rawDate,
-          this.state.polygonAvailableDates || [],
+          polygonAvailableDates || [],
         ) || formatArcgisDateToYmd(rawDate);
       return ymd === selectedNdviDate;
     }) as any;
@@ -6112,6 +6165,8 @@ export default class AgriGraffWidget extends React.PureComponent<
       value: Number.isFinite(rawValue) ? rawValue : null,
       rowFound: Boolean(row),
       vegetationRowCount: vegetationData?.length || 0,
+      availableDatesCount: availableDates.length,
+      navigable,
     });
 
     document.dispatchEvent(
@@ -6121,9 +6176,99 @@ export default class AgriGraffWidget extends React.PureComponent<
           indexKey: selectedChartIndexKey,
           value: Number.isFinite(rawValue) ? rawValue : null,
           language,
+          availableDates,
+          navigable,
         },
         bubbles: true,
       }),
+    );
+  };
+
+  /**
+   * Sorted unique YYYY-MM-DD dates from the selected polygon's chart series
+   * (prefers advertised /available-dates when present).
+   */
+  private getNavigableDateIndexDates = (): string[] => {
+    const { vegetationData, polygonAvailableDates } = this.state;
+    const advertised = polygonAvailableDates || [];
+    const fromSeries = (vegetationData || [])
+      .map((r: any) => {
+        const rawDate = r.raster_date ?? r.date;
+        if (!rawDate) return "";
+        return (
+          this.resolveAgainstAvailableDates(rawDate, advertised) ||
+          formatArcgisDateToYmd(rawDate) ||
+          ""
+        );
+      })
+      .filter(Boolean);
+    const unique = Array.from(new Set(fromSeries));
+    unique.sort((a, b) => a.localeCompare(b));
+    return unique;
+  };
+
+  /**
+   * Day-step from AgriDateIndexIndicator chevrons — select prev/next date
+   * for the current polygon + index and refresh the raster overlay.
+   */
+  private handleDateIndexNavigate = (event: Event): void => {
+    if (!this._isMounted) return;
+    const d: any = (event as CustomEvent)?.detail || {};
+    const {
+      selecteduniqueid,
+      selectedNdviDate,
+      selectedChartIndexKey,
+      vegetationData,
+    } = this.state;
+
+    if (!selecteduniqueid || !selectedNdviDate || !selectedChartIndexKey) {
+      return;
+    }
+
+    const dates = this.getNavigableDateIndexDates();
+    if (dates.length < 2) return;
+
+    let nextDate = d.date ? String(d.date).trim() : "";
+    if (!nextDate || !dates.includes(nextDate)) {
+      const direction = Number(d.direction) === -1 ? -1 : 1;
+      const idx = dates.indexOf(selectedNdviDate);
+      if (idx < 0) return;
+      const nextIdx = idx + direction;
+      if (nextIdx < 0 || nextIdx >= dates.length) return;
+      nextDate = dates[nextIdx];
+    }
+
+    if (nextDate === selectedNdviDate) return;
+
+    const row = (vegetationData || []).find((r: any) => {
+      const rawDate = r.raster_date ?? r.date;
+      if (!rawDate) return false;
+      const ymd =
+        this.resolveAgainstAvailableDates(
+          rawDate,
+          this.state.polygonAvailableDates || [],
+        ) || formatArcgisDateToYmd(rawDate);
+      return ymd === nextDate;
+    }) as any;
+    const rawValue = row ? Number(row[selectedChartIndexKey]) : NaN;
+
+    AgriGraffWidget.graffLog("chartPoint:indicator-navigate", {
+      uniqueid: selecteduniqueid,
+      from: selectedNdviDate,
+      to: nextDate,
+      indexKey: selectedChartIndexKey,
+      value: Number.isFinite(rawValue) ? rawValue : null,
+    });
+
+    this.setState({
+      selectedNdviDate: nextDate,
+      chartTooltip: null,
+    });
+
+    this.applyVegetationImageOverlay(
+      selecteduniqueid,
+      nextDate,
+      selectedChartIndexKey,
     );
   };
 
@@ -6744,9 +6889,6 @@ export default class AgriGraffWidget extends React.PureComponent<
           new Date(a.raster_date).getTime() - new Date(b.raster_date).getTime(),
       );
 
-      // Any polygon selection path ends here — auto-pick the latest date
-      // and load its raster so the map/chart reflect the newest observation
-      // without requiring a manual chart click.
       const lastRow = sorted[sorted.length - 1];
       const lastDate =
         this.resolveAgainstAvailableDates(
@@ -6755,20 +6897,46 @@ export default class AgriGraffWidget extends React.PureComponent<
         ) ||
         this.formatLocalDateYmd(new Date(lastRow.raster_date)) ||
         String(lastRow.raster_date || "").slice(0, 10);
-      const indexKey = this.state.selectedIndices?.[0] || "ndvi";
+      const indexKey = (this.state.selectedIndices?.[0] ||
+        "ndvi") as VegetationIndiceType;
+
+      // Prefer the date already chosen (chart click / NDVI chevrons), even if
+      // the user was on the table tab when they stepped days — switching back
+      // to the line chart must not snap to the latest observation.
+      const existingDate = (this.state.selectedNdviDate || "").trim();
+      const dateStillAvailable = existingDate
+        ? sorted.some((row) => {
+            const ymd =
+              this.resolveAgainstAvailableDates(
+                row.raster_date,
+                availableDates,
+              ) ||
+              this.formatLocalDateYmd(new Date(row.raster_date)) ||
+              String(row.raster_date || "").slice(0, 10);
+            return ymd === existingDate;
+          })
+        : false;
+      const nextDate = dateStillAvailable ? existingDate : lastDate || null;
+      const existingIndexKey = this.state.selectedChartIndexKey;
+      const selectedIndices = this.state.selectedIndices || [];
+      const nextIndexKey = (nextDate
+        ? existingIndexKey && selectedIndices.includes(existingIndexKey)
+          ? existingIndexKey
+          : indexKey
+        : null) as VegetationIndiceType | null;
 
       this.applyGraphData(sorted, {
         dateRangeStartIndex: null,
         dateRangeEndIndex: null,
         polygonAvailableDates: availableDates,
-        selectedNdviDate: lastDate || null,
-        selectedChartIndexKey: lastDate ? indexKey : null,
+        selectedNdviDate: nextDate,
+        selectedChartIndexKey: nextIndexKey,
       });
-      if (!isStale() && lastDate && this.state.selecteduniqueid) {
+      if (!isStale() && nextDate && this.state.selecteduniqueid && nextIndexKey) {
         this.applyVegetationImageOverlay(
           this.state.selecteduniqueid,
-          lastDate,
-          indexKey,
+          nextDate,
+          nextIndexKey,
         );
       }
 
@@ -6819,7 +6987,7 @@ export default class AgriGraffWidget extends React.PureComponent<
           return;
         }
         const nextKey = (selectedIndices[0] || "ndvi") as VegetationIndiceType;
-        this.setState({ selectedChartIndexKey: nextKey as any });
+        this.setState({ selectedChartIndexKey: nextKey });
         this.applyVegetationImageOverlay(
           selecteduniqueid,
           selectedNdviDate,
@@ -7215,6 +7383,57 @@ export default class AgriGraffWidget extends React.PureComponent<
     };
 
     const yAxisTickValues = [1, 0.5, 0, -0.5, -1];
+
+    // Persistent guide for the chart-selected date (survives mouse leave).
+    const selectionGuide = (() => {
+      if (!selectedNdviDate) return null;
+      const indexKey = (this.state.selectedChartIndexKey ||
+        primaryIndex) as
+        | "ndvi"
+        | "savi"
+        | "rvi"
+        | "ci"
+        | "evi"
+        | "ndwi";
+      const series = seriesByIndex[indexKey] || [];
+      const advertised = this.state.polygonAvailableDates || [];
+      for (const p of series) {
+        const ymd =
+          this.resolveAgainstAvailableDates(p.date, advertised) ||
+          this.formatLocalDateYmd(p.date);
+        if (ymd !== selectedNdviDate) continue;
+        return {
+          indexKey,
+          point: {
+            date: p.date,
+            value: p.value,
+            min: p.min,
+            max: p.max,
+            sourceIndex: p.sourceIndex,
+          },
+        };
+      }
+      return null;
+    })();
+
+    const isSameGuidePoint = (
+      a: typeof selectionGuide,
+      b: typeof chartTooltip,
+    ): boolean => {
+      if (!a || !b) return false;
+      if (a.indexKey !== b.indexKey) return false;
+      const aIdx = a.point.sourceIndex;
+      const bIdx = b.point.sourceIndex;
+      if (aIdx != null && bIdx != null) return aIdx === bIdx;
+      return a.point.date.getTime() === b.point.date.getTime();
+    };
+
+    // Sticky selection line always stays; hover adds a second line only when
+    // the cursor is over a different point.
+    const hoverGuide =
+      chartTooltip && !isSameGuidePoint(selectionGuide, chartTooltip)
+        ? chartTooltip
+        : null;
 
     // Clean min/max band path
     const minMaxAreaPath = (() => {
@@ -7719,6 +7938,72 @@ export default class AgriGraffWidget extends React.PureComponent<
       handlePointSelection(primaryIndex, point);
     };
 
+    const renderCrosshair = (
+      guide: NonNullable<typeof selectionGuide> | NonNullable<typeof chartTooltip>,
+      variant: "selection" | "hover",
+    ) => {
+      const pt = guide.point;
+      const lineX = xScale(pt.date, pt.sourceIndex);
+      const yVal = yScale(pt.value);
+      const yMin = pt.min != null ? yScale(pt.min) : null;
+      const yMax = pt.max != null ? yScale(pt.max) : null;
+      const lineHt = 12;
+      // Hover guide is a bit softer so the sticky selection line stays primary.
+      const lineStroke =
+        variant === "selection"
+          ? "rgba(16, 185, 129, 0.55)"
+          : "rgba(16, 185, 129, 0.28)";
+      const lineWidth = variant === "selection" ? 1.5 : 1.2;
+      return (
+        <g
+          key={`graph-crosshair-${variant}`}
+          className={`graph-crosshair graph-crosshair--${variant}`}
+          pointerEvents="none"
+        >
+          <line
+            x1={lineX}
+            y1={padding.top}
+            x2={lineX}
+            y2={padding.top + chartHeight}
+            stroke={lineStroke}
+            strokeWidth={lineWidth}
+            strokeDasharray="6,4"
+          />
+          {yMin != null && (
+            <line
+              x1={lineX - lineHt / 2}
+              y1={yMin}
+              x2={lineX + lineHt / 2}
+              y2={yMin}
+              stroke="#f87171"
+              strokeWidth={2}
+              opacity={variant === "selection" ? 1 : 0.7}
+            />
+          )}
+          {yMax != null && (
+            <line
+              x1={lineX - lineHt / 2}
+              y1={yMax}
+              x2={lineX + lineHt / 2}
+              y2={yMax}
+              stroke="#34d399"
+              strokeWidth={2}
+              opacity={variant === "selection" ? 1 : 0.7}
+            />
+          )}
+          <line
+            x1={lineX - lineHt / 2}
+            y1={yVal}
+            x2={lineX + lineHt / 2}
+            y2={yVal}
+            stroke="#fbbf24"
+            strokeWidth={2}
+            opacity={variant === "selection" ? 1 : 0.7}
+          />
+        </g>
+      );
+    };
+
     const floatingTooltip = chartTooltip
       ? (() => {
           const pt = chartTooltip.point;
@@ -8007,6 +8292,67 @@ export default class AgriGraffWidget extends React.PureComponent<
                     strokeDasharray="4 4"
                     strokeLinecap="round"
                   />
+
+                  {/* Selected-point min/max marks on the Y-axis */}
+                  {selectionGuide &&
+                    (() => {
+                      const pt = selectionGuide.point;
+                      const tickLen = 10;
+                      const labelGap = 14;
+                      const renderExtremum = (
+                        kind: "min" | "max",
+                        value: number | undefined,
+                        color: string,
+                      ) => {
+                        if (value == null || !Number.isFinite(value)) return null;
+                        const y = yScale(value);
+                        if (
+                          y < padding.top - 1 ||
+                          y > padding.top + chartHeight + 1
+                        ) {
+                          return null;
+                        }
+                        return (
+                          <g
+                            key={`y-sel-${kind}`}
+                            className={`graph-y-sel-extremum graph-y-sel-extremum--${kind}`}
+                          >
+                            <line
+                              x1={padding.left - tickLen}
+                              y1={y}
+                              x2={padding.left + 3}
+                              y2={y}
+                              stroke={color}
+                              strokeWidth={2}
+                              strokeLinecap="round"
+                            />
+                            <circle
+                              cx={padding.left}
+                              cy={y}
+                              r={2.4}
+                              fill={color}
+                            />
+                            <text
+                              x={padding.left - labelGap}
+                              y={y + 3.5}
+                              textAnchor="end"
+                              fontSize={Math.max(9, axisTickFont - 1)}
+                              fill={color}
+                              fontWeight="700"
+                              fontFamily="'Manrope', sans-serif"
+                            >
+                              {value.toFixed(2)}
+                            </text>
+                          </g>
+                        );
+                      };
+                      return (
+                        <g className="graph-y-sel-extrema" pointerEvents="none">
+                          {renderExtremum("max", pt.max, "#34d399")}
+                          {renderExtremum("min", pt.min, "#f87171")}
+                        </g>
+                      );
+                    })()}
                 </g>
 
                 {false && minMaxAreaPath && (
@@ -8258,202 +8604,9 @@ export default class AgriGraffWidget extends React.PureComponent<
                 {/* Y-axis title (INDEX) removed by request */}
               </g>
 
-              {/* Vertical crosshair + min/max/index toolinfo */}
-              {chartTooltip &&
-                (() => {
-                  const tooltipIndexKey = chartTooltip.indexKey;
-                  const pt = chartTooltip.point;
-                  const lineX = xScale(pt.date, pt.sourceIndex);
-                  const yVal = yScale(pt.value);
-                  const yMin = pt.min != null ? yScale(pt.min) : null;
-                  const yMax = pt.max != null ? yScale(pt.max) : null;
-                  const pad = 12;
-                  const lineH = 16;
-                  const boxW = 188;
-                  const headerH = 22;
-                  const boxH = headerH + 4 + lineH * 3 + pad;
-                  // Center tooltip on the hovered point’s X; clamp inside plot area
-                  let boxX = lineX - boxW / 2;
-                  const minBoxX = padding.left + 4;
-                  const maxBoxX = padding.left + chartWidth - boxW - 4;
-                  boxX = Math.max(minBoxX, Math.min(boxX, maxBoxX));
-                  // Inline SVG tooltip hidden; using fixed floating tooltip above widget.
-                  const boxY = -10000;
-                  const lineHt = 12;
-                  const minStr = pt.min != null ? pt.min.toFixed(4) : "—";
-                  const maxStr = pt.max != null ? pt.max.toFixed(4) : "—";
-                  const valStr = pt.value.toFixed(4);
-                  const indicatorColor = indexColorMap[tooltipIndexKey] || "#fbbf24";
-                  const dateLocale = language === "ru" ? "ru-RU" : "en-GB";
-                  const dateStr = pt.date.toLocaleDateString(dateLocale, {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  });
-                  return (
-                    <g className="graph-crosshair" pointerEvents="none">
-                      <line
-                        x1={lineX}
-                        y1={padding.top}
-                        x2={lineX}
-                        y2={padding.top + chartHeight}
-                        stroke="rgba(16, 185, 129, 0.4)"
-                        strokeWidth={1.5}
-                        strokeDasharray="6,4"
-                      />
-                      {yMin != null && (
-                        <line
-                          x1={lineX - lineHt / 2}
-                          y1={yMin}
-                          x2={lineX + lineHt / 2}
-                          y2={yMin}
-                          stroke="#f87171"
-                          strokeWidth={2}
-                        />
-                      )}
-                      {yMax != null && (
-                        <line
-                          x1={lineX - lineHt / 2}
-                          y1={yMax}
-                          x2={lineX + lineHt / 2}
-                          y2={yMax}
-                          stroke="#34d399"
-                          strokeWidth={2}
-                        />
-                      )}
-                      <line
-                        x1={lineX - lineHt / 2}
-                        y1={yVal}
-                        x2={lineX + lineHt / 2}
-                        y2={yVal}
-                        stroke="#fbbf24"
-                        strokeWidth={2}
-                      />
-                      <rect
-                        x={boxX}
-                        y={boxY}
-                        width={boxW}
-                        height={boxH}
-                        rx={10}
-                        ry={10}
-                        fill={tooltipBg}
-                        stroke={tooltipBorder}
-                        strokeWidth={1.5}
-                        filter="none"
-                      />
-                      <rect
-                        x={boxX}
-                        y={boxY}
-                        width={boxW}
-                        height={headerH}
-                        rx={10}
-                        ry={0}
-                        fill={tooltipHeaderBg}
-                      />
-                      <rect
-                        x={boxX}
-                        y={boxY + headerH}
-                        width={boxW}
-                        height={1}
-                        fill={tooltipBorder}
-                      />
-                      <text
-                        x={boxX + pad}
-                        y={boxY + 15}
-                        fontSize={tooltipFont}
-                        fill={themeText}
-                        fontWeight="400"
-                      >
-                        {language === "en" ? "Date" : language === "ru"
-                          ? "Дата"
-                          : language === "uz_lat"
-                            ? "Sana"
-                            : "Сана"}
-                      </text>
-                      <text
-                        x={boxX + boxW - pad}
-                        y={boxY + 15}
-                        fontSize={tooltipFont}
-                        fill={themeText}
-                        fontWeight="400"
-                        textAnchor="end"
-                      >
-                        {dateStr}
-                      </text>
-                      <text
-                        x={boxX + pad}
-                        y={boxY + headerH + 4 + lineH}
-                        fontSize={tooltipFont}
-                        fill={themeText}
-                        fontWeight="400"
-                      >
-                        {language === "en" ? "Max" : language === "ru"
-                          ? "Макс"
-                          : language === "uz_lat"
-                            ? "Max"
-                            : "Макс"}
-                      </text>
-                      <text
-                        x={boxX + boxW - pad}
-                        y={boxY + headerH + 4 + lineH}
-                        fontSize={tooltipFont}
-                        fill="#059669"
-                        fontWeight="400"
-                        textAnchor="end"
-                      >
-                        {maxStr}
-                      </text>
-                      <text
-                        x={boxX + pad}
-                        y={boxY + headerH + 4 + lineH * 2}
-                        fontSize={tooltipFont}
-                        fill={themeText}
-                        fontWeight="400"
-                      >
-                        {tooltipIndexKey.toUpperCase()}
-                      </text>
-                      <circle
-                        cx={boxX + pad + 42}
-                        cy={boxY + headerH + 4 + lineH * 2 - 4}
-                        r={4}
-                        fill={indicatorColor}
-                      />
-                      <text
-                        x={boxX + boxW - pad}
-                        y={boxY + headerH + 4 + lineH * 2}
-                        fontSize={tooltipFont}
-                        fill={indicatorColor}
-                        fontWeight="400"
-                        textAnchor="end"
-                      >
-                        {valStr}
-                      </text>
-                      <text
-                        x={boxX + pad}
-                        y={boxY + headerH + 4 + lineH * 3}
-                        fontSize={tooltipFont}
-                        fill={themeText}
-                        fontWeight="400"
-                      >
-                        {language === "en" ? "Min" : language === "ru"
-                          ? "Мин"
-                          : language === "uz_lat"
-                            ? "Min"
-                            : "Мин"}
-                      </text>
-                      <text
-                        x={boxX + boxW - pad}
-                        y={boxY + headerH + 4 + lineH * 3}
-                        fontSize={tooltipFont}
-                        fill="#dc2626"
-                        fontWeight="400"
-                        textAnchor="end"
-                      >
-                        {minStr}
-                      </text>
-                    </g>
-                  );
-                })()}
+              {/* Sticky selection crosshair + optional hover crosshair */}
+              {selectionGuide ? renderCrosshair(selectionGuide, "selection") : null}
+              {hoverGuide ? renderCrosshair(hoverGuide, "hover") : null}
             </svg>
             {floatingTooltip &&
               ReactDOM.createPortal(

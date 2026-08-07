@@ -837,7 +837,10 @@ export function syncRegionYearLayerVisibility(
     return shown;
   }
 
-  const allLayers: any[] = map.allLayers?.toArray?.() || map.layers?.toArray?.() || [];
+  // Walk GroupLayer / MapImage / FeatureLayer trees explicitly. Relying only
+  // on allLayers can miss Map Viewer TOC titles that live as nested sublayers
+  // under "agri YYYY republic data".
+  const regionYearLeaves = collectRegionYearLeafLayers(map);
   log("scan:start", {
     filters: {
       yil,
@@ -848,116 +851,67 @@ export function syncRegionYearLayerVisibility(
       vh,
       uniqueIdCount: uniqueIds ? uniqueIds.length : null,
     },
-    totalLayersOnMap: allLayers.length,
-    allLayerTitles: allLayers.map((l: any) => l?.title || l?.url || l?.id),
+    totalRegionYearLeaves: regionYearLeaves.length,
+    allLayerTitles: regionYearLeaves.map(
+      (l: any) => l?.title || l?.url || l?.id,
+    ),
   });
 
-  const candidates: Array<{ title: string; matchesYear: boolean; matchesRegion: boolean; visible: boolean }> = [];
+  const candidates: Array<{
+    title: string;
+    matchesYear: boolean;
+    matchesRegion: boolean;
+    visible: boolean;
+  }> = [];
 
-  for (const layer of allLayers) {
-    if (String(layer?.type || "").toLowerCase() === "group") continue;
-
+  for (const layer of regionYearLeaves) {
     const haystack = `${String(layer?.title || "")} ${String(layer?.url || "")}`;
-    const looksLikeRegionYearLayer =
-      /\byear\b/i.test(haystack) && /\b(19|20)\d{2}\b/.test(haystack);
-    if (!looksLikeRegionYearLayer) continue;
-
     const matchesYear = haystackMatchesYear(haystack, yil);
-    // No viloyat selected yet => nothing should be visible (previously
-    // `!viloyat` defaulted this to true, showing every region's polygons
-    // for the current year before the user picked one).
-    const matchesRegion = viloyat ? haystackMatchesRegion(haystack, viloyat) : false;
+    const matchesRegion = viloyat
+      ? haystackMatchesRegion(haystack, viloyat)
+      : false;
     const shouldShow = matchesYear && matchesRegion;
 
     try {
-      // Capture before we flip `visible` — only newly shown region layers
-      // need the opacity-0 → crop → opacity-1 dance. Re-syncing the same
-      // layer (e.g. tuman/turi definitionExpression only, or a polygon
-      // click that used to re-enter this path) must keep opacity 1 so
-      // hitTest/popup and the district filter stay stable.
-      const wasAlreadyShown =
-        !!layer.visible && Number(layer.opacity ?? 1) > 0.05;
       layer.visible = shouldShow;
-      // A leaf layer nested inside a hidden GroupLayer (the "database 20XX
-      // year" containers these are grouped under) won't render no matter
-      // what its own `visible` is — force every ancestor group visible too
-      // when this leaf is the one that should show.
       if (shouldShow) {
-        // Start fully transparent only on first reveal. AgriLocalization
-        // applies the crop UniqueValueRenderer, waits for MapImage redraw,
-        // then sets opacity back to 1.
-        if (!wasAlreadyShown) {
-          try {
-            layer.opacity = 0;
-          } catch {
-            /* ignore */
+        // Keep opacity at 1. The old opacity-0 → crop → opacity-1 dance left
+        // MapImage sublayers / FeatureLayers permanently invisible when the
+        // opacity target was the leaf (Sublayer.opacity is not the paint
+        // opacity of the parent MapImage export).
+        try {
+          const opacityTarget = getRegionYearOpacityTarget(layer);
+          if (opacityTarget && Number(opacityTarget.opacity ?? 1) !== 1) {
+            opacityTarget.opacity = 1;
           }
+          if (Number(layer.opacity ?? 1) !== 1) layer.opacity = 1;
+        } catch {
+          /* ignore */
         }
-        const ancestorsForced: Array<{ title: unknown; wasVisible: unknown }> = [];
+
         let parent = (layer as any)?.parent;
-        while (parent && String(parent?.type || "").toLowerCase() === "group") {
-          ancestorsForced.push({ title: parent?.title, wasVisible: parent?.visible });
-          try {
-            parent.visible = true;
-          } catch {
-            /* ignore */
+        while (parent) {
+          const parentType = String(parent?.type || "").toLowerCase();
+          if (parentType === "group" || parentType === "map-image") {
+            try {
+              parent.visible = true;
+            } catch {
+              /* ignore */
+            }
           }
           parent = parent?.parent;
         }
-        log("ancestors:forced", {
-          layer: layer?.title || layer?.url || layer?.id,
-          hasDirectParent: Boolean((layer as any)?.parent),
-          directParentType: (layer as any)?.parent?.type ?? null,
-          directParentTitle: (layer as any)?.parent?.title ?? null,
-          ancestorsForced,
-        });
 
-        log("layer:render-blockers-check", {
-          layer: layer?.title || layer?.url || layer?.id,
-          visible: (layer as any)?.visible,
-          opacity: (layer as any)?.opacity,
-          minScale: (layer as any)?.minScale,
-          maxScale: (layer as any)?.maxScale,
-          loaded: (layer as any)?.loaded,
-          loadStatus: (layer as any)?.loadStatus,
-        });
-
-        // These "agri <region> <year> year" layers are MapImageLayers — the
-        // parent's own `visible` only controls whether it's requested at
-        // all. What actually gets drawn (the export's `layers=show:...`
-        // param) is driven independently by each *sublayer's* `visible`,
-        // which defaults to off, and its own `definitionExpression`
-        // (narrowed to `tuman`/`turi`/`vh` here when any is selected).
-        const forcedSublayers = forceSublayersVisible(
+        applyShownRegionYearLayerFilters(
           layer,
           tuman,
           turlar,
           vh,
           uniqueIds,
         );
-        log("sublayers:forced", {
-          layer: layer?.title || layer?.url || layer?.id,
-          tuman,
-          turi,
-          vh,
-          uniqueIdCount: uniqueIds ? uniqueIds.length : null,
-          hadSublayersCollection: Boolean(
-            (layer as any)?.sublayers || (layer as any)?.allSublayers,
-          ),
-          sublayerCount: forcedSublayers.length,
-          sublayers: forcedSublayers,
-        });
 
         const liveSublayers = collectLiveSublayers(layer);
         shown.push({ layer, sublayers: liveSublayers });
-      } else {
-        // Reset so the next time this region is shown we don't inherit a
-        // stuck opacity=0 from a prior crop-reveal cycle.
-        try {
-          if (layer.opacity !== 1) layer.opacity = 1;
-        } catch {
-          /* ignore */
-        }
       }
     } catch {
       /* some layer types may not support direct visibility assignment */
@@ -970,14 +924,87 @@ export function syncRegionYearLayerVisibility(
     });
   }
 
-  if (!candidates.length) {
-    log("scan:NO-REGION-YEAR-LAYERS-FOUND — none of the map's layers matched " +
-      "the \"<title> ... year ... 20XX\" naming pattern. Check actual layer titles above.");
-  } else {
-    log("scan:result", { candidates, shownCount: candidates.filter((c) => c.visible).length });
+  if (!candidates.length && viloyat) {
+    // Local-only diagnostic — no network. Helps confirm title mismatch.
+    try {
+      const titles = (
+        map.allLayers?.toArray?.() ||
+        map.layers?.toArray?.() ||
+        []
+      ).map((l: any) => `${l?.type || "?"}:${l?.title || l?.id || "?"}`);
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[Agro_monitoring] No region-year field layers matched selection",
+        { yil, viloyat, mapLayerTitles: titles },
+      );
+    } catch {
+      /* ignore */
+    }
   }
 
+  log("scan:result", {
+    candidates,
+    shownCount: candidates.filter((c) => c.visible).length,
+  });
+
   return shown;
+}
+
+/** Opacity must be set on MapImage parent — Sublayer.opacity does not paint tiles. */
+function getRegionYearOpacityTarget(layer: any): any {
+  const type = String(layer?.type || "").toLowerCase();
+  if (type === "sublayer") {
+    return getMapImageParentLayer(layer) || layer;
+  }
+  return layer;
+}
+
+/**
+ * Collect only per-region field leaves (never the republic aggregate container).
+ * Safe: does not toggle visibility and does not request exports.
+ */
+function collectRegionYearLeafLayers(map: any): any[] {
+  const out: any[] = [];
+  const seen = new Set<any>();
+
+  const consider = (layer: any): void => {
+    if (!layer || seen.has(layer)) return;
+    seen.add(layer);
+    const type = String(layer?.type || "").toLowerCase();
+    if (type === "group") {
+      const children = layer.layers?.toArray?.() || [];
+      for (const child of children) consider(child);
+      return;
+    }
+    if (type === "map-image") {
+      const haystack = `${String(layer?.title || "")} ${String(layer?.url || "")}`;
+      // Single-region MapImage (classic naming) — treat the service itself.
+      if (
+        looksLikeRegionYearLayerHaystack(haystack) &&
+        haystackHasKnownRegionToken(haystack)
+      ) {
+        out.push(layer);
+      }
+      const subs =
+        layer.allSublayers?.toArray?.() ||
+        layer.sublayers?.toArray?.() ||
+        [];
+      for (const sub of subs) consider(sub);
+      return;
+    }
+
+    const haystack = `${String(layer?.title || "")} ${String(layer?.url || "")}`;
+    if (
+      looksLikeRegionYearLayerHaystack(haystack) &&
+      haystackHasKnownRegionToken(haystack)
+    ) {
+      out.push(layer);
+    }
+  };
+
+  const roots = map.layers?.toArray?.() || map.allLayers?.toArray?.() || [];
+  for (const layer of roots) consider(layer);
+  return out;
 }
 
 /** Collect every queryable field layer on the map (feature + map-image sublayers). */
@@ -1029,29 +1056,117 @@ export function regionFilterValuesEqual(a: string, b: string): boolean {
   return normalizeRegionToken(a) === normalizeRegionToken(b);
 }
 
+const REGION_ALIAS_GROUPS: string[][] = [
+  ["fargona", "fergana", "ferghana", "фарғона", "фергана"],
+  ["samarqand", "samarkand", "samar", "samarkhand"],
+  ["toshkent", "tashkent"],
+  ["andijon", "andijan"],
+  ["namangan", "namangan"],
+  ["buxoro", "bukhara", "buxara"],
+  ["qashqadaryo", "kashkadarya", "kashkadaria", "qashqadarya", "kashkada"],
+  ["surxondaryo", "surkhandarya", "surxandarya"],
+  ["jizzax", "jizzakh", "jizakh"],
+  ["sirdaryo", "syrdarya", "sirdarya"],
+  ["navoiy", "navoi"],
+  ["xorazm", "khorezm", "xorezm", "kharezm"],
+  ["qoraqalpogiston", "karakalpakstan", "nukus", "qqr"],
+];
+
+/**
+ * Detect region+year field layers by title/url.
+ * Accepts both:
+ * - classic: "... year ... 2026" / "agri andijan 2026 year"
+ * - Test agri style: "agri andijan 2026" (agri + year number, no "year" word)
+ *
+ * Does NOT by itself mean the layer should be toggled — callers must also
+ * require a known region token so aggregate titles like
+ * "agri 2026 republic data" are never treated as a single region leaf
+ * (forcing all of its sublayers visible would export every region at once).
+ */
+export function looksLikeRegionYearLayerHaystack(haystack: string): boolean {
+  const text = String(haystack || "");
+  if (!/\b(19|20)\d{2}\b/.test(text)) return false;
+  return /\byear\b/i.test(text) || /\bagri\b/i.test(text);
+}
+
+/** True when title/url contains a known viloyat alias (andijan, ferghana, …). */
+export function haystackHasKnownRegionToken(haystack: string): boolean {
+  const text = normalizeRegionToken(haystack);
+  if (!text) return false;
+  for (const group of REGION_ALIAS_GROUPS) {
+    if (group.some((alias) => text.includes(normalizeRegionToken(alias)))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Apply tuman/turi/vh DE for a shown region leaf.
+ * - MapImage with children: only that service's sublayers (one region).
+ * - Leaf FeatureLayer / MapImage sublayer: DE on itself only.
+ * Never walks sibling region sublayers of a republic aggregate.
+ */
+function applyShownRegionYearLayerFilters(
+  layer: any,
+  tuman: string,
+  turi: string | string[],
+  vh = "",
+  uniqueIds: string[] | null = null,
+): Array<Record<string, unknown>> {
+  const type = String(layer?.type || "").toLowerCase();
+  const subs =
+    layer?.sublayers?.toArray?.() || layer?.allSublayers?.toArray?.() || [];
+  const hasChildSublayers = Array.isArray(subs) && subs.length > 0;
+
+  // Leaf (FeatureLayer or MapImage Sublayer): filter this layer only.
+  if (type === "sublayer" || !hasChildSublayers) {
+    const definitionExpressionBefore = layer?.definitionExpression ?? null;
+    try {
+      const nextExpression = buildSublayerDefinitionExpression(
+        layer,
+        tuman,
+        turi,
+        vh,
+        uniqueIds,
+      );
+      guardSublayerDefinitionExpression(layer, nextExpression);
+      if (
+        String(definitionExpressionBefore ?? "") !==
+        String(nextExpression ?? "")
+      ) {
+        layer.definitionExpression = nextExpression;
+      }
+    } catch {
+      /* ignore */
+    }
+    return [
+      {
+        id: layer?.id,
+        title: layer?.title,
+        visible: layer?.visible,
+        definitionExpressionBefore: summarizeDefinitionExpression(
+          definitionExpressionBefore,
+        ),
+        definitionExpressionAfter: summarizeDefinitionExpression(
+          layer?.definitionExpression ?? null,
+        ),
+        mode: "leaf",
+      },
+    ];
+  }
+
+  // Single-region MapImage: force only its own field sublayers.
+  return forceSublayersVisible(layer, tuman, turi, vh, uniqueIds);
+}
+
 /** Region name tokens for matching layer titles like "Water Fergana region 2025 year". */
 function getRegionMatchTokens(viloyat: string): string[] {
   const canonical = canonicalizeRegionFilterValue(viloyat);
   const norm = normalizeRegionToken(canonical);
   if (!norm) return [];
 
-  const aliasGroups: string[][] = [
-    ["fargona", "fergana", "ferghana", "фарғона", "фергана"],
-    ["samarqand", "samarkand", "samar", "samarkhand"],
-    ["toshkent", "tashkent"],
-    ["andijon", "andijan"],
-    ["namangan", "namangan"],
-    ["buxoro", "bukhara", "buxara"],
-    ["qashqadaryo", "kashkadarya", "kashkadaria", "qashqadarya", "kashkada"],
-    ["surxondaryo", "surkhandarya", "surxandarya"],
-    ["jizzax", "jizzakh", "jizakh"],
-    ["sirdaryo", "syrdarya", "sirdarya"],
-    ["navoiy", "navoi"],
-    ["xorazm", "khorezm", "xorezm", "kharezm"],
-    ["qoraqalpogiston", "karakalpakstan", "nukus", "qqr"],
-  ];
-
-  for (const group of aliasGroups) {
+  for (const group of REGION_ALIAS_GROUPS) {
     if (group.some((alias) => norm.includes(normalizeRegionToken(alias)))) {
       return group.map((alias) => normalizeRegionToken(alias)).filter(Boolean);
     }

@@ -21,6 +21,7 @@ import {
   readAgriAdminBordersVisible,
   setAgriAdminBordersVisible,
 } from "../embedded/shared/agri-admin-boundary-layer";
+import { looksLikeRegionYearLayerHaystack } from "../embedded/shared/feature-layer-data";
 
 interface Props {
   mapWidgetId: string;
@@ -388,9 +389,7 @@ export default function EmbeddedAgriMap(props: Props) {
             const haystack = `${String(layer?.title || '')} ${String(layer?.url || '')}`;
             const isRegionYearLayer =
               String(layer?.type || '').toLowerCase() !== 'group' &&
-              /\bagri\b/i.test(haystack) &&
-              /\byear\b/i.test(haystack) &&
-              /\b(19|20)\d{2}\b/.test(haystack);
+              looksLikeRegionYearLayerHaystack(haystack);
             if (!isRegionYearLayer) continue;
             layer.visible = false;
             if (Number(layer.opacity ?? 1) !== 1) layer.opacity = 1;

@@ -29,6 +29,7 @@ import {
   Pin,
   Settings2,
   Sprout,
+  ChevronUp,
   X,
 } from "lucide-react";
 import { EvapoHiddenConnectors } from "../../shared/EvapoHiddenConnectors";
@@ -140,6 +141,8 @@ interface State {
   objectIdField: string | null;
 
   showPopup: boolean;
+  /** X collapses the panel; selection + data stay until real deselect. */
+  popupMinimized: boolean;
   popupPosition: { x: number; y: number } | null;
   clickScreenPoint: { x: number; y: number } | null;
 
@@ -293,6 +296,7 @@ export default class AgriPolygon extends React.PureComponent<
       objectIdField: null,
 
       showPopup: false,
+      popupMinimized: false,
       popupPosition: null,
       clickScreenPoint: null,
 
@@ -860,6 +864,8 @@ export default class AgriPolygon extends React.PureComponent<
 
   private handleOutsideClick = (event: MouseEvent) => {
     if (!this.state.showPopup || !this._popupRef.current) return;
+    // Collapsed chip stays until an empty-map deselect / geography reset.
+    if (this.state.popupMinimized) return;
 
     const target = event.target as Node | null;
     if (!target || this._popupRef.current.contains(target)) return;
@@ -874,7 +880,8 @@ export default class AgriPolygon extends React.PureComponent<
       if (dashboardUi) return;
     }
 
-    this.closePopup({ restoreExtent: false, notifyDeselect: false });
+    // Outside dashboard chrome → collapse instead of wiping selection.
+    this.minimizePopup();
   };
 
   private onPopupHeaderMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -1661,7 +1668,11 @@ export default class AgriPolygon extends React.PureComponent<
       .replace(/[{}]/g, "")
       .trim();
     if (this.state.showPopup && active === clean && this.state.selectedAttrs) {
-      this.broadcastPopupVisibility(true);
+      if (this.state.popupMinimized) {
+        this.expandPopup();
+      } else {
+        this.broadcastPopupVisibility(true);
+      }
       return;
     }
 
@@ -1802,6 +1813,7 @@ export default class AgriPolygon extends React.PureComponent<
         selectedOID: Number(oid),
         objectIdField: oidField,
         showPopup: true,
+        popupMinimized: false,
         chartExpanded: shouldPin,
         chartHoverIndex: null,
         popupPosition,
@@ -2633,8 +2645,16 @@ export default class AgriPolygon extends React.PureComponent<
       /*
        * Same already-active field (incl. table selection) clicked on map →
        * deactivate without zooming in again. Graff restores the pre-select extent.
+       * If the panel was only minimized, expand it instead of deselecting.
        */
       if (activeKey && earlyCleanKey && activeKey === earlyCleanKey) {
+        if (this.state.popupMinimized) {
+          evapoMapClickDebug("selection:expand-minimized-same-field", {
+            uniqueid: earlyCleanKey,
+          });
+          this.expandPopup();
+          return;
+        }
         evapoMapClickDebug("selection:toggle-off-same-field", {
           uniqueid: earlyCleanKey,
         });
@@ -2721,6 +2741,7 @@ export default class AgriPolygon extends React.PureComponent<
         objectIdField: oidField,
 
         showPopup: true,
+        popupMinimized: false,
         chartExpanded: shouldPin,
         chartHoverIndex: null,
         popupPosition,
@@ -3279,18 +3300,26 @@ export default class AgriPolygon extends React.PureComponent<
       this.scheduleMapViewFallback();
     }
 
-    if (prevState.showPopup !== this.state.showPopup) {
-      this.broadcastPopupVisibility(this.state.showPopup);
+    if (
+      prevState.showPopup !== this.state.showPopup ||
+      prevState.popupMinimized !== this.state.popupMinimized
+    ) {
+      this.broadcastPopupVisibility(
+        this.state.showPopup && !this.state.popupMinimized,
+      );
     } else if (
       this.state.showPopup &&
+      !this.state.popupMinimized &&
       prevState.pinToCorner !== this.state.pinToCorner
     ) {
       this.broadcastPopupVisibility(true);
     }
 
-    if (!this.state.showPopup) return;
+    if (!this.state.showPopup || this.state.popupMinimized) return;
 
-    const openedNow = this.state.showPopup && !prevState.showPopup;
+    const openedNow =
+      (this.state.showPopup && !prevState.showPopup) ||
+      (prevState.popupMinimized && !this.state.popupMinimized);
     const attachmentsChanged =
       this.state.loadingAttachments !== prevState.loadingAttachments ||
       (this.state.attachments?.length || 0) !==
@@ -3341,6 +3370,7 @@ export default class AgriPolygon extends React.PureComponent<
         lastClickedLayerKey: null,
         popupPosition: null,
         clickScreenPoint: null,
+        popupMinimized: false,
       });
       return;
     }
@@ -3352,6 +3382,7 @@ export default class AgriPolygon extends React.PureComponent<
     this.revokeAllAttachmentUrls();
     this.setState({
       showPopup: false,
+      popupMinimized: false,
       popupPosition: null,
       clickScreenPoint: null,
       loading: false,
@@ -3375,6 +3406,22 @@ export default class AgriPolygon extends React.PureComponent<
     } else {
       this._extentBeforeSelection = null;
     }
+  };
+
+  /** Header X — collapse the panel; keep polygon selection + loaded attrs. */
+  private minimizePopup = (): void => {
+    if (!this._isMounted || !this.state.showPopup || this.state.popupMinimized) {
+      return;
+    }
+    this.setState({ popupMinimized: true });
+  };
+
+  /** Expand a previously minimized attribute panel. */
+  private expandPopup = (): void => {
+    if (!this._isMounted || !this.state.showPopup || !this.state.popupMinimized) {
+      return;
+    }
+    this.setState({ popupMinimized: false });
   };
 
   /* ---------------- DS hook (instantiates DS) ---------------- */
@@ -3853,6 +3900,7 @@ export default class AgriPolygon extends React.PureComponent<
       loading,
       error,
       showPopup,
+      popupMinimized,
       popupPosition,
       loadingAttachments,
       attachments,
@@ -3869,6 +3917,73 @@ export default class AgriPolygon extends React.PureComponent<
 
     const view = this.state.jimuMapView?.view;
     const layoutPos = popupPosition;
+
+    if (popupMinimized) {
+      const viewForChip = view || this.state.jimuMapView?.view || null;
+      const mapRect = viewForChip ? this.getMapAreaRect(viewForChip) : null;
+      const chipStyle: React.CSSProperties = mapRect
+        ? {
+            position: "fixed",
+            right: Math.max(
+              8,
+              (typeof window !== "undefined" ? window.innerWidth : mapRect.right) -
+                mapRect.right +
+                this.DASHBOARD_POPUP_VERTICAL_INSET,
+            ),
+            top: mapRect.top + this.DASHBOARD_POPUP_VERTICAL_INSET,
+            left: "auto",
+            bottom: "auto",
+            transform: "none",
+          }
+        : {
+            position: "fixed",
+            right: this.DASHBOARD_POPUP_VERTICAL_INSET,
+            top: this.DASHBOARD_POPUP_VERTICAL_INSET,
+            left: "auto",
+            bottom: "auto",
+          };
+
+      const stopMapHit = (e: React.SyntheticEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+      };
+
+      return (
+        <div
+          className={`agri3-popup-minimized ${
+            pinToCorner ? "is-pinned" : "is-floating"
+          }`}
+          style={chipStyle}
+          ref={this._popupRef}
+          onMouseDown={stopMapHit}
+          onPointerDown={stopMapHit}
+          onClick={stopMapHit}
+        >
+          <button
+            type="button"
+            className="agri3-popup-minimized-btn"
+            onMouseDown={stopMapHit}
+            onPointerDown={stopMapHit}
+            onClick={(e) => {
+              stopMapHit(e);
+              this.expandPopup();
+            }}
+            title={this.tr("action.expand")}
+            aria-label={this.tr("action.expand")}
+          >
+            <span className="agri3-popup-minimized-accent" aria-hidden="true" />
+            <span className="agri3-popup-minimized-title">{title}</span>
+            <ChevronUp
+              className="agri3-popup-minimized-icon"
+              size={16}
+              strokeWidth={2.4}
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+      );
+    }
+
     const { width: popupWidth, height: popupHeight } = this.getPopupDimensions(
       view || null,
       pinToCorner,
@@ -3933,10 +4048,9 @@ export default class AgriPolygon extends React.PureComponent<
           <button
             type="button"
             className="agri3-popup-close"
-            onClick={() =>
-              this.closePopup({ restoreExtent: false, notifyDeselect: false })
-            }
-            aria-label="Close"
+            onClick={this.minimizePopup}
+            aria-label={this.tr("action.minimize")}
+            title={this.tr("action.minimize")}
           >
             <X size={16} strokeWidth={2.4} aria-hidden="true" />
           </button>

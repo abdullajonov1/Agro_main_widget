@@ -824,10 +824,24 @@ export default class AgriDashboard extends React.PureComponent<
       "--agri-dashboard-date-index-gap",
       8,
     );
-    const width = this.readDashboardCssPx(
+    const cardWidth = this.readDashboardCssPx(
       "--agri-dashboard-date-index-width",
       168,
     );
+    const navSize = this.readDashboardCssPx(
+      "--agri-dashboard-date-index-nav-size",
+      34,
+    );
+    const navGap = this.readDashboardCssPx(
+      "--agri-dashboard-date-index-nav-gap",
+      6,
+    );
+    const hasDayNav = !!overlayEl.querySelector(
+      ".agri-date-index-shell.has-day-nav",
+    );
+    const width = hasDayNav
+      ? cardWidth + 2 * (navSize + navGap)
+      : cardWidth;
     const height = this.readDashboardCssPx(
       "--agri-dashboard-date-index-height",
       66,
@@ -995,10 +1009,8 @@ export default class AgriDashboard extends React.PureComponent<
       );
     }
     const showMapLoader =
-      (!!activeMapId || !!webMapDataSourceId) &&
-      (this.state.mapLoading ||
-        this.state.mapSurfaceLoading ||
-        this.state.dashboardLoading);
+      !!activeMapId &&
+      (this.state.mapLoading || this.state.mapSurfaceLoading);
     const portalTarget =
       this.portalReady && this.portalHost
         ? this.portalHost

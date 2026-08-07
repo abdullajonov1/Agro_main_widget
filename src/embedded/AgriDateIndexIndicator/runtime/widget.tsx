@@ -3,6 +3,7 @@
 // AgriGraff10's chart (and that index's value for that date), purely by
 // listening to the "graffDateIndexSelectionChanged" event Graff broadcasts —
 // no ArcGIS queries of its own. Hidden when nothing is selected.
+// Round prev/next chevrons sit outside the card and step the selected date.
 
 import { AllWidgetProps, React } from "jimu-core";
 import "../../AgriIndicator10/runtime/KadastrIndicator.css";
@@ -35,6 +36,10 @@ interface State {
   date: string | null;
   indexKey: string | null;
   value: number | null;
+  /** Sorted YYYY-MM-DD dates for the selected polygon (for day navigation). */
+  availableDates: string[];
+  /** True when a polygon is selected and day chevrons should be shown. */
+  navigable: boolean;
 
   isDarkTheme: boolean;
   language: AgriLanguage;
@@ -90,6 +95,8 @@ export default class AgriDateIndexIndicator extends React.PureComponent<
       date: null,
       indexKey: null,
       value: null,
+      availableDates: [],
+      navigable: false,
 
       isDarkTheme: this.detectIsDarkTheme(),
       language: this.resolveInitialLanguage(),
@@ -154,11 +161,19 @@ export default class AgriDateIndexIndicator extends React.PureComponent<
     const nextLanguage = d.language
       ? this.normalizeLanguage(d.language)
       : this.state.language;
+    const nextDates = Array.isArray(d.availableDates)
+      ? d.availableDates
+          .map((x: unknown) => String(x || "").trim())
+          .filter(Boolean)
+      : [];
+    const nextNavigable = Boolean(d.navigable) && nextDates.length > 1;
 
     this.setState({
       date: nextDate,
       indexKey: nextIndexKey,
       value: nextValue,
+      availableDates: nextDates,
+      navigable: nextNavigable,
       language: nextLanguage,
     });
   };
@@ -169,8 +184,47 @@ export default class AgriDateIndexIndicator extends React.PureComponent<
     return num.toFixed(4);
   };
 
+  private navigateDay = (direction: -1 | 1): void => {
+    const { date, availableDates, navigable } = this.state;
+    if (!navigable || !date || availableDates.length < 2) return;
+
+    const idx = availableDates.indexOf(date);
+    if (idx < 0) return;
+    const nextIdx = idx + direction;
+    if (nextIdx < 0 || nextIdx >= availableDates.length) return;
+
+    try {
+      document.dispatchEvent(
+        new CustomEvent("graffDateIndexNavigate", {
+          detail: {
+            date: availableDates[nextIdx],
+            direction,
+            source: "AgriDateIndexIndicator",
+            timestamp: Date.now(),
+          },
+          bubbles: true,
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+  };
+
+  private handlePrevDay = (e: React.MouseEvent<HTMLButtonElement>): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    this.navigateDay(-1);
+  };
+
+  private handleNextDay = (e: React.MouseEvent<HTMLButtonElement>): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    this.navigateDay(1);
+  };
+
   render() {
-    const { date, indexKey, value, isDarkTheme } = this.state;
+    const { date, indexKey, value, isDarkTheme, availableDates, navigable } =
+      this.state;
 
     const hasSelection = !!(date && indexKey);
     if (!hasSelection) return null;
@@ -178,25 +232,78 @@ export default class AgriDateIndexIndicator extends React.PureComponent<
     const themeClass = isDarkTheme ? "dark-theme" : "light-theme";
     const indexColor =
       INDEX_COLORS[String(indexKey || "").toLowerCase()] || "#2ec4f1";
+    const dateIdx = date ? availableDates.indexOf(date) : -1;
+    const canPrev = navigable && dateIdx > 0;
+    const canNext =
+      navigable && dateIdx >= 0 && dateIdx < availableDates.length - 1;
+    const showNav = navigable;
 
     return (
       <div
-        className={`vegetation-stats-widget ${themeClass} map-overlay-mode agri-date-index-card has-selection`}
-        data-ind-size="sm"
+        className={`agri-date-index-shell ${themeClass}${
+          showNav ? " has-day-nav" : ""
+        }`}
         style={{ "--agri-date-index-color": indexColor } as React.CSSProperties}
       >
-        <div className="widget-content">
-          <div className="stat-main">
-            <div className="agri-date-index-meta">
-              <span className="agri-date-index-key">{indexKey.toUpperCase()}</span>
-              <span className="agri-date-index-date">{date}</span>
-            </div>
-            <div className="agri-date-index-value-row">
-              <span className="agri-date-index-accent" aria-hidden="true" />
-              <span className="stat-value">{this.formatValue(value)}</span>
+        {showNav ? (
+          <button
+            type="button"
+            className="agri-date-index-nav agri-date-index-nav--prev"
+            onClick={this.handlePrevDay}
+            disabled={!canPrev}
+            aria-label="Previous day"
+            title="Previous day"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M15 6L9 12L15 18"
+                stroke="currentColor"
+                strokeWidth="2.25"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        ) : null}
+        <div
+          className={`vegetation-stats-widget ${themeClass} map-overlay-mode agri-date-index-card has-selection`}
+          data-ind-size="sm"
+        >
+          <div className="widget-content">
+            <div className="stat-main">
+              <div className="agri-date-index-meta">
+                <span className="agri-date-index-key">
+                  {indexKey.toUpperCase()}
+                </span>
+                <span className="agri-date-index-date">{date}</span>
+              </div>
+              <div className="agri-date-index-value-row">
+                <span className="agri-date-index-accent" aria-hidden="true" />
+                <span className="stat-value">{this.formatValue(value)}</span>
+              </div>
             </div>
           </div>
         </div>
+        {showNav ? (
+          <button
+            type="button"
+            className="agri-date-index-nav agri-date-index-nav--next"
+            onClick={this.handleNextDay}
+            disabled={!canNext}
+            aria-label="Next day"
+            title="Next day"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M9 6L15 12L9 18"
+                stroke="currentColor"
+                strokeWidth="2.25"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        ) : null}
       </div>
     );
   }

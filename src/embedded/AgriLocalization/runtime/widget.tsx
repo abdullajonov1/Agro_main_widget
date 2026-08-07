@@ -43,6 +43,7 @@ import {
   resolveAllowedViloyatsForGroups,
 } from "../../../shared/agri-access-config";
 import {
+  getAgriTableDataLayer,
   queryAgriUniqueIdsForWhere,
   queryAgriTuriCropMappings,
   buildSpatialJoinWhere,
@@ -750,18 +751,25 @@ export default class AgriLocalization extends React.PureComponent<
   }
 
   private getCropRendererTargetLayers = (): any[] => {
-    // Only paint live MapImage sublayers that RegionYear sync currently
-    // shows. Never fall back to every map sublayer (that caused ~hundreds
-    // of groupBy requests on refresh before any viloyat was selected).
+    // Only paint layers RegionYear sync currently shows. Never fall back to
+    // every map sublayer (that caused ~hundreds of groupBy requests).
+    // Test agri leaves are FeatureLayer / MapImage Sublayer with no children —
+    // include entry.layer itself when sublayers is empty.
     const candidates: any[] = [];
     for (const entry of this._lastShownRegionYearLayers || []) {
-      candidates.push(...((entry as any)?.sublayers || []));
+      const fromEntry = ((entry as any)?.sublayers || []).filter(Boolean);
       const loaded =
         (entry as any)?.layer?.allSublayers?.toArray?.() ||
         (entry as any)?.layer?.sublayers?.toArray?.() ||
         [];
+      const fromLoaded: any[] = [];
       for (const sub of loaded) {
-        if (sub?.visible !== false) candidates.push(sub);
+        if (sub?.visible !== false) fromLoaded.push(sub);
+      }
+      if (fromEntry.length || fromLoaded.length) {
+        candidates.push(...fromEntry, ...fromLoaded);
+      } else if ((entry as any)?.layer) {
+        candidates.push((entry as any).layer);
       }
     }
 
@@ -1064,6 +1072,19 @@ export default class AgriLocalization extends React.PureComponent<
       const layer = (entry as any)?.layer;
       if (!layer) continue;
       try {
+        // MapImage tiles paint from the parent service opacity; leaf Sublayer
+        // opacity alone does not make fields visible.
+        const type = String(layer?.type || "").toLowerCase();
+        if (type === "sublayer") {
+          let parent = layer.parent;
+          while (parent) {
+            if (String(parent?.type || "").toLowerCase() === "map-image") {
+              parent.opacity = opacity;
+              break;
+            }
+            parent = parent.parent;
+          }
+        }
         layer.opacity = opacity;
       } catch {
         /* ignore */
@@ -6267,17 +6288,24 @@ export default class AgriLocalization extends React.PureComponent<
 
         const liveSublayers: any[] =
           (entry.layer as any)?.allSublayers?.toArray?.() || [];
-        const sublayers = Array.from(
+        const childSublayers = Array.from(
           new Set<any>([...(entry.sublayers || []), ...liveSublayers]),
         );
+        // Leaf FeatureLayer / MapImage Sublayer: DE lives on entry.layer itself.
+        const queryTargets =
+          childSublayers.length > 0
+            ? childSublayers
+            : entry.layer
+              ? [entry.layer]
+              : [];
 
         AgriLocalization.agriLog("zoom:district:layer", {
           district,
           layer: String((entry.layer as any)?.title || (entry.layer as any)?.id || ""),
-          sublayerCount: sublayers.length,
+          sublayerCount: queryTargets.length,
         });
 
-        for (const sublayer of sublayers) {
+        for (const sublayer of queryTargets) {
           if (!isCurrent()) return false;
 
           try {
@@ -6487,12 +6515,17 @@ export default class AgriLocalization extends React.PureComponent<
         })();
       }
 
-      // Only the opacity-0 → crop → opacity-1 dance for layers that are
-      // still hidden; already-opaque region layers only need expression refresh.
+      // Opacity stays at 1 now (leaf/Sublayer paint fix), so revealAfterCrop
+      // is often false — still wait for MapImage redraw after region/year
+      // crop-renderer so the first paint isn't default symbology.
       revealAfterCrop = (this._lastShownRegionYearLayers || []).some(
         (entry) =>
           !!entry?.layer && Number((entry.layer as any)?.opacity ?? 1) <= 0.05,
       );
+      const awaitRedrawAfterCrop =
+        revealAfterCrop ||
+        zoomRequest.reason === "region" ||
+        zoomRequest.reason === "year";
       // Skip crop re-query on VH-only changes: distinct-turi over a huge
       // `uniqueid IN (...)` WHERE is the main source of lag.
       if (
@@ -6502,7 +6535,7 @@ export default class AgriLocalization extends React.PureComponent<
       ) {
         await this.syncCropRenderer();
         if (!stillCurrent()) return;
-        if (revealAfterCrop) await this.waitForShownRegionYearRedraw();
+        if (awaitRedrawAfterCrop) await this.waitForShownRegionYearRedraw();
       }
       if (vhOnly) {
         // Apply DE immediately; don't block the UI on a full MapImage export
@@ -6672,10 +6705,17 @@ export default class AgriLocalization extends React.PureComponent<
         if (isStale()) return null;
         const liveSublayers: any[] =
           (entry.layer as any)?.allSublayers?.toArray?.() || [];
-        const sublayers = Array.from(
+        const childSublayers = Array.from(
           new Set<any>([...(entry.sublayers || []), ...liveSublayers]),
         );
-        for (const sublayer of sublayers) {
+        // Leaf FeatureLayer / MapImage Sublayer: query the leaf itself.
+        const queryTargets =
+          childSublayers.length > 0
+            ? childSublayers
+            : entry.layer
+              ? [entry.layer]
+              : [];
+        for (const sublayer of queryTargets) {
           if (isStale()) return null;
           try {
             const where = String(
