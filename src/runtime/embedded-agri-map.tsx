@@ -364,8 +364,11 @@ export default function EmbeddedAgriMap(props: Props) {
 
         const itemId = getItemId(ds);
         const portalUrl = getPortalUrl(ds);
-        const [WebMap, Map, MapView] = await loadArcGISJSAPIModules([
-          "esri/WebMap", "esri/Map", "esri/views/MapView",
+        const [WebMap, Map, MapView, Extent] = await loadArcGISJSAPIModules([
+          "esri/WebMap",
+          "esri/Map",
+          "esri/views/MapView",
+          "esri/geometry/Extent",
         ]);
         if (disposed || !containerRef.current) return;
 
@@ -391,15 +394,27 @@ export default function EmbeddedAgriMap(props: Props) {
               String(layer?.type || '').toLowerCase() !== 'group' &&
               looksLikeRegionYearLayerHaystack(haystack);
             if (!isRegionYearLayer) continue;
+            // Hide only — do not layer.when()/load every region service here.
+            // Forcing load on all agri region layers at once can flood MapServer.
             layer.visible = false;
             if (Number(layer.opacity ?? 1) !== 1) layer.opacity = 1;
           }
         }
 
+        // Always frame Uzbekistan — WebMap portal viewpoint is often all of
+        // Central Asia, which looks like "UZ is incomplete / empty".
+        const uzbekistanExtent = new Extent({
+          xmin: 55.9,
+          ymin: 37.15,
+          xmax: 73.2,
+          ymax: 45.65,
+          spatialReference: { wkid: 4326 },
+        });
+
         view = new MapView({
           container: containerRef.current,
           map,
-          ...(itemId ? {} : { center: [64.6, 41.4], zoom: 6 }),
+          extent: uzbekistanExtent,
           constraints: { rotationEnabled: false, minZoom: 5, snapToZoom: false },
           ui: { components: [] },
         });
@@ -411,6 +426,12 @@ export default function EmbeddedAgriMap(props: Props) {
         }
         await view.when();
         if (disposed) { view.destroy(); return; }
+
+        try {
+          await view.goTo(uzbekistanExtent, { animate: false });
+        } catch {
+          /* viewpoint already set via extent */
+        }
 
         const jimuMapView = await manager.createJimuMapView({
           mapWidgetId: props.mapWidgetId,

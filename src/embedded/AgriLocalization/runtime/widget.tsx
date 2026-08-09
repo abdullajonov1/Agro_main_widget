@@ -45,6 +45,7 @@ import {
 import {
   getAgriTableDataLayer,
   queryAgriUniqueIdsForWhere,
+  queryAgriRegionDistrictMappings,
   queryAgriTuriCropMappings,
   buildSpatialJoinWhere,
 } from "../../shared/agri-table-data-source";
@@ -54,6 +55,7 @@ import {
   queryVegetationLatestDatesByRegion,
   queryVegetationStatusCounts,
   queryVegetationStatusCountsByStatus,
+  queryVegetationStatusCountsByRegionScopes,
   queryVegetationUniqueIdsForStatus,
   REPUBLIC_VH_USE_STATUS_STATS,
 } from "../../shared/agri-vegetation-data-source";
@@ -2028,6 +2030,8 @@ export default class AgriLocalization extends React.PureComponent<
         } catch (e: any) {
           if (this._isMounted && isApplyCurrent()) {
             this.setState({ error: e.message, loading: false });
+            // pendingOnly may already have spun AgriBar — clear it on failure.
+            this.broadcastFilterState();
           }
         } finally {
           // Rapid crop multi-select/clear can make several map applies stale.
@@ -2436,24 +2440,23 @@ export default class AgriLocalization extends React.PureComponent<
     }
     this.setState({ activeMapView: jimuMapView }, () => {
       this.attachMapClickDispatcher(jimuMapView);
-      if (jimuMapView.view?.ready) {
+      const captureHomeExtent = (): void => {
         try {
           const ex: any = (jimuMapView.view as any)?.extent;
           this._homeExtent = ex?.clone ? ex.clone() : ex || null;
         } catch {
           this._homeExtent = null;
         }
+      };
+      if (jimuMapView.view?.ready) {
+        // EmbeddedAgriMap frames Uzbekistan before ready — capture that as home.
+        captureHomeExtent();
         this.initializeMapConnection(jimuMapView);
       } else {
         const h = jimuMapView.view.watch("ready", (isReady) => {
           if (isReady) {
             h.remove();
-            try {
-              const ex: any = (jimuMapView.view as any)?.extent;
-              this._homeExtent = ex?.clone ? ex.clone() : ex || null;
-            } catch {
-              this._homeExtent = null;
-            }
+            captureHomeExtent();
             this.initializeMapConnection(jimuMapView);
           }
         });
@@ -2960,7 +2963,7 @@ export default class AgriLocalization extends React.PureComponent<
         // Override inherited OBJECTID ordering: PostgreSQL requires DISTINCT
         // queries to order only by a field present in the select list.
         (q as any).orderByFields = ["viloyat ASC"];
-        (q as any).num = 50000;
+        (q as any).num = 200;
         const res = await layer.queryFeatures(q);
         const feats = res?.features ?? [];
         for (const f of feats) {
@@ -3294,79 +3297,43 @@ export default class AgriLocalization extends React.PureComponent<
   }
 
   /**
-   * Fetches from the feature layer and stores which viloyat has which region number
-   * (attribute `region`) and which tuman has which district number (attribute `district`).
-   * Call once when the layer is ready so filters can use numeric codes.
+   * Stores viloyat→region / tuman→district / turi→crop_id from Agri_table_data
+   * via grouped DISTINCT queries (not a 50k-row attribute dump).
    */
   private fetchAndStoreRegionDistrictMappings = async (): Promise<void> => {
-    const layers = this.state.featureLayers?.length
-      ? this.state.featureLayers
-      : this.state.featureLayer
-        ? [this.state.featureLayer]
-        : [];
-    if (!layers.length) return;
-
     const viloyatToRegion: Record<string, number> = {};
     const tumanToDistrict: Record<string, number> = {};
     const turiToCropId: Record<string, string> = {};
 
     try {
-      for (const layer of layers) {
-        const q = layer.createQuery();
-        q.where = "1=1";
-        q.outFields = ["viloyat", "region", "tuman", "district", "turi", "crop_id"];
-        q.returnGeometry = false;
-        q.num = 50000;
+      const [regionDistrictRows, turiCropRows] = await Promise.all([
+        queryAgriRegionDistrictMappings(),
+        queryAgriTuriCropMappings(),
+      ]);
 
-        const res = await layer.queryFeatures(q);
-        const features = res?.features ?? [];
-
-        for (const f of features) {
-          const a = (f.attributes || {}) as Record<string, unknown>;
-          const vilKey = this.makeRegionDistrictKey(
-            a?.viloyat != null && a.viloyat !== "" ? String(a.viloyat) : null,
-          );
-          const region =
-            a?.region != null && a.region !== "" ? Number(a.region) : NaN;
-          const tumanKey = this.makeRegionDistrictKey(
-            a?.tuman != null && a.tuman !== "" ? String(a.tuman) : null,
-          );
-          const district =
-            a?.district != null && a.district !== "" ? Number(a.district) : NaN;
-
-          if (vilKey && Number.isFinite(region)) {
-            viloyatToRegion[vilKey] = region;
-          }
-          if (tumanKey && Number.isFinite(district)) {
-            tumanToDistrict[tumanKey] = district;
-          }
-
-          const turiKey = this.makeRegionDistrictKey(
-            a?.turi != null && a.turi !== "" ? String(a.turi) : null,
-          );
-          const cropId =
-            a?.crop_id != null && a.crop_id !== "" ? String(a.crop_id) : "";
-          if (turiKey && cropId && !(turiKey in turiToCropId)) {
-            turiToCropId[turiKey] = cropId;
-          }
+      for (const row of regionDistrictRows) {
+        const vilKey = this.makeRegionDistrictKey(row.viloyat);
+        const tumanKey = this.makeRegionDistrictKey(row.tuman);
+        if (vilKey && Number.isFinite(row.region)) {
+          viloyatToRegion[vilKey] = row.region;
         }
+        if (tumanKey && Number.isFinite(row.district)) {
+          tumanToDistrict[tumanKey] = row.district;
+        }
+      }
+
+      for (const row of turiCropRows) {
+        const key = this.makeRegionDistrictKey(row.turi);
+        if (key && row.cropId) turiToCropId[key] = row.cropId;
       }
 
       this._viloyatToRegion = viloyatToRegion;
       this._tumanToDistrict = tumanToDistrict;
       this._turiToCropId = turiToCropId;
-    } catch (e) {}
-
-    // Full turi→crop_id dictionary from Agri_table_data so the first Pie crop
-    // click does not wait on a per-layer sample miss + ensureCropId query.
-    try {
-      const turiCropRows = await queryAgriTuriCropMappings();
-      for (const row of turiCropRows) {
-        const key = this.makeRegionDistrictKey(row.turi);
-        if (key && row.cropId) this._turiToCropId[key] = row.cropId;
-      }
-    } catch {
-      /* sample map above remains as fallback */
+    } catch (e) {
+      AgriLocalization.agriLog("regionDistrictMap:FAILED", {
+        error: String((e as any)?.message || e),
+      });
     }
   };
 
@@ -5297,44 +5264,27 @@ export default class AgriLocalization extends React.PureComponent<
     if (!effectiveViloyat && !this.state.ndviDateLocked) {
       const selectedYear =
         String(yil || "").match(/\b(18|19|20)\d{2}\b/)?.[0] || "";
+      // Same year-gate as Index graff — never scan all-time vegetation.
+      if (!selectedYear) return zeroResult;
       try {
         const regionScopes = await queryVegetationLatestDatesByRegion({
-          year: selectedYear || undefined,
+          year: selectedYear,
         });
         if (!this._isMounted) return null;
         if (!regionScopes.length) return zeroResult;
 
         const cropFilter = cropIds.length ? cropIds : undefined;
-        const queryExact = () =>
-          Promise.all(
-            regionScopes.map((scope) =>
-              queryVegetationStatusCounts({
-                region: scope.region,
-                date: scope.date,
-                cropIds: cropFilter,
-              }),
-            ),
-          );
-
-        let resultGroups: Awaited<ReturnType<typeof queryVegetationStatusCounts>>[] =
-          [];
+        let rows: Awaited<ReturnType<typeof queryVegetationStatusCounts>> = [];
         let usedOverview = false;
 
         if (REPUBLIC_VH_USE_STATUS_STATS) {
           try {
-            resultGroups = await Promise.all(
-              regionScopes.map((scope) =>
-                queryVegetationStatusCountsByStatus({
-                  region: scope.region,
-                  date: scope.date,
-                  cropIds: cropFilter,
-                }),
-              ),
+            // Batch regions that share a latest date → typically 1–3 queries.
+            rows = await queryVegetationStatusCountsByRegionScopes(
+              regionScopes,
+              cropFilter,
             );
             usedOverview = true;
-            // Successful overview (even all-empty) must NOT fall back to the
-            // uniqueid pager — that was reintroducing the ~700-query storm
-            // whenever the newest dates had no rows for the current crop.
           } catch (overviewError: any) {
             AgriLocalization.agriLog(
               "computeVhBarData:republic-overview-failed-fallback",
@@ -5344,16 +5294,50 @@ export default class AgriLocalization extends React.PureComponent<
                 regionCount: regionScopes.length,
               },
             );
-            resultGroups = await queryExact();
+            // Fallback: bounded concurrency, still no uniqueid pager.
+            const mapPool = async <T, R>(
+              items: T[],
+              concurrency: number,
+              worker: (item: T) => Promise<R>,
+            ): Promise<R[]> => {
+              const results: R[] = new Array(items.length);
+              let next = 0;
+              const run = async () => {
+                while (next < items.length) {
+                  if (!this._isMounted) return;
+                  const index = next++;
+                  results[index] = await worker(items[index]);
+                }
+              };
+              const pool = Math.max(1, Math.min(concurrency, items.length));
+              await Promise.all(Array.from({ length: pool }, () => run()));
+              return results;
+            };
+            const groups = await mapPool(regionScopes, 3, (scope) =>
+              queryVegetationStatusCountsByStatus({
+                region: scope.region,
+                date: scope.date,
+                cropIds: cropFilter,
+              }),
+            );
+            rows = groups.flat();
             usedOverview = false;
           }
         } else {
-          resultGroups = await queryExact();
+          const groups = await Promise.all(
+            regionScopes.map((scope) =>
+              queryVegetationStatusCounts({
+                region: scope.region,
+                date: scope.date,
+                cropIds: cropFilter,
+              }),
+            ),
+          );
+          rows = groups.flat();
         }
 
         if (!this._isMounted) return null;
 
-        const rows = resultGroups.flat();
         const result = this.aggregateVhServiceRows(rows);
         const { categories, totalCount } = result;
 

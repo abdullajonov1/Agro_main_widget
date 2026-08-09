@@ -343,12 +343,12 @@ export default class AgriIndicatorUnusedLand extends React.PureComponent<
       });
     } catch (e: any) {
       if (!this._isMounted || requestId !== this._requestId) return;
-      this.setState({ loading: false, error: e?.message || "Query failed" });
+      this.setState({ loading: false, value: null, error: null });
     }
   };
 
   private formatNumber = (num: number | null): string => {
-    if (num === null || num === undefined) return "0";
+    if (num === null || num === undefined) return "-";
     return Math.round(num)
       .toString()
       .replace(/\B(?=(\d{3})+(?!\d))/g, " ");
@@ -371,6 +371,8 @@ export default class AgriIndicatorUnusedLand extends React.PureComponent<
     const themeClass = isDarkTheme ? "dark-theme" : "light-theme";
     // Soft refresh: spinner only before the first successful paint.
     const showBlockingLoader = loading && value == null && !error;
+    const connectionFailed =
+      this.state.connectionStatus === "failed" && !!error && value == null;
 
     return (
       <div
@@ -381,16 +383,16 @@ export default class AgriIndicatorUnusedLand extends React.PureComponent<
           <div className="loading-indicator">
             <AgriDashboardSpinner compact size={40} />
           </div>
-        ) : error && value == null ? (
-          <div className="error-container">
-            <div className="error-icon">⚠️</div>
-          </div>
         ) : (
           <div className="widget-content">
             <div className="stat-main">
               <div className="stat-label">{label}</div>
               <div className="stat-value">
-                <AgriAnimatedCount value={value} emptyFallback="-" />
+                {connectionFailed ? (
+                  <span title={String(error || "")}>-</span>
+                ) : (
+                  <AgriAnimatedCount value={value} emptyFallback="-" />
+                )}
                 <span className="unit">{unit}</span>
               </div>
             </div>

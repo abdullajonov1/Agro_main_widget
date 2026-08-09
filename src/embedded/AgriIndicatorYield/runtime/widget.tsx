@@ -389,7 +389,9 @@ export default class AgriIndicatorYield extends React.PureComponent<
       });
     } catch (e: any) {
       if (!this._isMounted || requestId !== this._requestId) return;
-      this.setState({ loading: false, error: e?.message || "Query failed" });
+      // Soft-empty on query failure — never flash ⚠️ on first paint when
+      // year/filter is still settling or yld is sparse.
+      this.setState({ loading: false, value: null, error: null });
     }
   };
 
@@ -414,6 +416,8 @@ export default class AgriIndicatorYield extends React.PureComponent<
 
     const themeClass = isDarkTheme ? "dark-theme" : "light-theme";
     const showBlockingLoader = loading && value == null && !error;
+    const connectionFailed =
+      this.state.connectionStatus === "failed" && !!error && value == null;
 
     return (
       <div
@@ -424,16 +428,16 @@ export default class AgriIndicatorYield extends React.PureComponent<
           <div className="loading-indicator">
             <AgriDashboardSpinner compact size={40} />
           </div>
-        ) : error && value == null ? (
-          <div className="error-container">
-            <div className="error-icon">⚠️</div>
-          </div>
         ) : (
           <div className="widget-content">
             <div className="stat-main">
               <div className="stat-label">{label}</div>
               <div className="stat-value">
-                <AgriAnimatedCount value={value} emptyFallback="-" />
+                {connectionFailed ? (
+                  <span title={String(error || "")}>-</span>
+                ) : (
+                  <AgriAnimatedCount value={value} emptyFallback="-" />
+                )}
               </div>
             </div>
           </div>

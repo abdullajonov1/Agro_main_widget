@@ -2145,10 +2145,30 @@ export default class VegetationStatsWidget extends React.PureComponent<
             whereForSum += ` AND ${this.nz(field)}`;
           }
         } else {
+          // Republic overview: Agri_table_data is one national table — summing
+          // every non-republic layer duplicates the same FeatureServer query.
+          const sameUrlAsCanonical = (layer: __esri.FeatureLayer) => {
+            const a = String((layer as any)?.url || "").replace(/\/+$/, "");
+            const b = String((fl as any)?.url || "").replace(/\/+$/, "");
+            return !!a && !!b && a === b;
+          };
           const nonRepublicLayers = allLayers.filter(
             (l) => !this.isRepublicLayer(l),
           );
-          layersForSum = nonRepublicLayers.length ? nonRepublicLayers : [fl];
+          const distinctLayerUrls = new Set(
+            nonRepublicLayers
+              .map((l) => String((l as any)?.url || "").replace(/\/+$/, ""))
+              .filter(Boolean),
+          );
+          if (
+            !nonRepublicLayers.length ||
+            distinctLayerUrls.size <= 1 ||
+            nonRepublicLayers.every(sameUrlAsCanonical)
+          ) {
+            layersForSum = [fl];
+          } else {
+            layersForSum = nonRepublicLayers;
+          }
         }
 
         let totalRaw = 0;

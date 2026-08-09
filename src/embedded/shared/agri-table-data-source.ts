@@ -183,75 +183,103 @@ export interface AgriTuriCropMappingRow {
   cropId: string;
 }
 
+let agriRegionDistrictMappingsPromise: Promise<
+  AgriRegionDistrictMappingRow[]
+> | null = null;
+let agriTuriCropMappingsPromise: Promise<AgriTuriCropMappingRow[]> | null =
+  null;
+
 /**
  * Distinct viloyat/region/tuman/district combinations from the full
  * Agri_table_data table — one grouped query instead of sampling the first
  * 50k rows from a widget-local layer (which may only cover a few viloyats).
+ * Cached so Localization + Graff share one network round-trip.
  */
 export async function queryAgriRegionDistrictMappings(): Promise<
   AgriRegionDistrictMappingRow[]
 > {
-  const { layer } = await getAgriTableDataLayer();
-  const query = layer.createQuery();
-  query.where = "1=1";
-  query.groupByFieldsForStatistics = ["viloyat", "region", "tuman", "district"];
-  query.outStatistics = [
-    {
-      statisticType: "count",
-      onStatisticField: layer.objectIdField || "objectid",
-      outStatisticFieldName: "cnt",
-    },
-  ] as any;
-  query.returnGeometry = false;
+  if (!agriRegionDistrictMappingsPromise) {
+    agriRegionDistrictMappingsPromise = (async () => {
+      const { layer } = await getAgriTableDataLayer();
+      const query = layer.createQuery();
+      query.where = "1=1";
+      query.groupByFieldsForStatistics = [
+        "viloyat",
+        "region",
+        "tuman",
+        "district",
+      ];
+      query.outStatistics = [
+        {
+          statisticType: "count",
+          onStatisticField: layer.objectIdField || "objectid",
+          outStatisticFieldName: "cnt",
+        },
+      ] as any;
+      query.returnGeometry = false;
 
-  const result = await layer.queryFeatures(query);
-  const rows: AgriRegionDistrictMappingRow[] = [];
-  for (const feature of result?.features ?? []) {
-    const attrs = (feature as any)?.attributes || {};
-    const viloyat = String(attrs.viloyat ?? "").trim();
-    const tuman = String(attrs.tuman ?? "").trim();
-    const region = Number(attrs.region);
-    const district = Number(attrs.district);
-    if (
-      !viloyat ||
-      !tuman ||
-      !Number.isFinite(region) ||
-      !Number.isFinite(district)
-    ) {
-      continue;
-    }
-    rows.push({ viloyat, region, tuman, district });
+      const result = await layer.queryFeatures(query);
+      const rows: AgriRegionDistrictMappingRow[] = [];
+      for (const feature of result?.features ?? []) {
+        const attrs = (feature as any)?.attributes || {};
+        const viloyat = String(attrs.viloyat ?? "").trim();
+        const tuman = String(attrs.tuman ?? "").trim();
+        const region = Number(attrs.region);
+        const district = Number(attrs.district);
+        if (
+          !viloyat ||
+          !tuman ||
+          !Number.isFinite(region) ||
+          !Number.isFinite(district)
+        ) {
+          continue;
+        }
+        rows.push({ viloyat, region, tuman, district });
+      }
+      agriTableLog("regionDistrictMappings:success", { rowCount: rows.length });
+      return rows;
+    })().catch((err) => {
+      agriRegionDistrictMappingsPromise = null;
+      throw err;
+    });
   }
-  agriTableLog("regionDistrictMappings:success", { rowCount: rows.length });
-  return rows;
+  return agriRegionDistrictMappingsPromise;
 }
 
-/** Distinct turi → crop_id pairs from Agri_table_data. */
+/** Distinct turi → crop_id pairs from Agri_table_data. Cached singleton. */
 export async function queryAgriTuriCropMappings(): Promise<
   AgriTuriCropMappingRow[]
 > {
-  const { layer } = await getAgriTableDataLayer();
-  const query = layer.createQuery();
-  query.where = "1=1";
-  query.groupByFieldsForStatistics = ["turi", "crop_id"];
-  query.outStatistics = [
-    {
-      statisticType: "count",
-      onStatisticField: layer.objectIdField || "objectid",
-      outStatisticFieldName: "cnt",
-    },
-  ] as any;
-  query.returnGeometry = false;
+  if (!agriTuriCropMappingsPromise) {
+    agriTuriCropMappingsPromise = (async () => {
+      const { layer } = await getAgriTableDataLayer();
+      const query = layer.createQuery();
+      query.where = "1=1";
+      query.groupByFieldsForStatistics = ["turi", "crop_id"];
+      query.outStatistics = [
+        {
+          statisticType: "count",
+          onStatisticField: layer.objectIdField || "objectid",
+          outStatisticFieldName: "cnt",
+        },
+      ] as any;
+      query.returnGeometry = false;
 
-  const result = await layer.queryFeatures(query);
-  const rows: AgriTuriCropMappingRow[] = [];
-  for (const feature of result?.features ?? []) {
-    const attrs = (feature as any)?.attributes || {};
-    const turi = String(attrs.turi ?? "").trim();
-    const cropId = String(attrs.crop_id ?? "").trim();
-    if (!turi || !cropId) continue;
-    rows.push({ turi, cropId });
+      const result = await layer.queryFeatures(query);
+      const rows: AgriTuriCropMappingRow[] = [];
+      for (const feature of result?.features ?? []) {
+        const attrs = (feature as any)?.attributes || {};
+        const turi = String(attrs.turi ?? "").trim();
+        const cropId = String(attrs.crop_id ?? "").trim();
+        if (!turi || !cropId) continue;
+        rows.push({ turi, cropId });
+      }
+      agriTableLog("turiCropMappings:success", { rowCount: rows.length });
+      return rows;
+    })().catch((err) => {
+      agriTuriCropMappingsPromise = null;
+      throw err;
+    });
   }
-  agriTableLog("turiCropMappings:success", { rowCount: rows.length });
-  return rows;
+  return agriTuriCropMappingsPromise;
 }

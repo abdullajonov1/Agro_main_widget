@@ -73,8 +73,6 @@ export default class AgriDashboard extends React.PureComponent<
   private mapLayoutRaf = 0;
   private layoutObserversReady = false;
   private resizeListenerAttached = false;
-  private documentMutationObserver: MutationObserver | null = null;
-  private documentMutationTimer: ReturnType<typeof setTimeout> | null = null;
   private lastIndicatorToggleAt = 0;
   private indicatorAnimTimer: ReturnType<typeof setTimeout> | null = null;
   private mapIndicatorHost: HTMLElement | null = null;
@@ -85,7 +83,8 @@ export default class AgriDashboard extends React.PureComponent<
     unused: AllWidgetProps<any>;
     reserve: AllWidgetProps<any>;
   } | null = null;
-  private lastMapSlotLayoutAt = 0;
+  /** Last map-slot CSS size that triggered view.resize — skip no-op resizes. */
+  private lastMapSlotSize = { w: -1, h: -1 };
   private mapReadyWatchHandle: { remove?: () => void } | null = null;
   private mapUpdatingWatchHandle: { remove?: () => void } | null = null;
   private mapLoadingRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -128,10 +127,8 @@ export default class AgriDashboard extends React.PureComponent<
     if (this.isBuilderDesignMode()) return;
     document.documentElement.classList.add("agri-dashboard-active");
     this.setupMapSlotObserver();
-    this.setupDocumentObserver();
-    this.scheduleMapSlotLayout();
+    this.scheduleMapSlotLayout(true);
     this.scheduleMapLoadingWatchers();
-    this.updateDashboardLoadingState();
     document.addEventListener(
       "agriMapSurfaceLoading",
       this.handleMapSurfaceLoading as EventListener,
@@ -159,7 +156,25 @@ export default class AgriDashboard extends React.PureComponent<
     if (this.isBuilderDesignMode()) return;
     this.ensurePortalHost();
     this.ensureLayoutObservers();
-    this.scheduleMapSlotLayout();
+
+    const prevCfg = prevProps.config as any;
+    const nextCfg = this.props.config as any;
+    const layoutSizeChanged =
+      prevCfg?.leftPanelWidthPercent !== nextCfg?.leftPanelWidthPercent ||
+      prevCfg?.bottomRowFraction !== nextCfg?.bottomRowFraction;
+    const layoutChromeChanged =
+      prevState.mapPopupOpen !== this.state.mapPopupOpen ||
+      prevState.mapPopupPinned !== this.state.mapPopupPinned ||
+      prevState.indicatorsOpen !== this.state.indicatorsOpen ||
+      prevState.indicatorsAnimPhase !== this.state.indicatorsAnimPhase ||
+      prevState.mapLoading !== this.state.mapLoading ||
+      prevState.mapSurfaceLoading !== this.state.mapSurfaceLoading;
+    // Never resize on every React render — that used to couple with map DOM
+    // paints and keep Chromium at ~100% CPU.
+    if (layoutSizeChanged || layoutChromeChanged) {
+      this.scheduleMapSlotLayout(true);
+    }
+
     // Only re-bind map watchers when map id or loading-related state needs it —
     // calling every update with no view schedules a 300ms retry forever and
     // can cascade with portal Host DOM mutations.
@@ -175,7 +190,6 @@ export default class AgriDashboard extends React.PureComponent<
     ) {
       this.scheduleMapLoadingWatchers();
     }
-    this.updateDashboardLoadingState();
     if (
       prevState.indicatorsOpen !== this.state.indicatorsOpen ||
       prevState.indicatorsAnimPhase !== this.state.indicatorsAnimPhase
@@ -240,15 +254,13 @@ export default class AgriDashboard extends React.PureComponent<
     this.dashboardRootRef.current?.classList.remove("agri-popup-pinned");
     this.dashboardResizeObserver?.disconnect();
     this.dashboardResizeObserver = null;
-    window.removeEventListener("resize", this.scheduleMapSlotLayout);
+    this.layoutObserversReady = false;
+    window.removeEventListener("resize", this.onWindowResize);
     if (this.mapLayoutRaf) cancelAnimationFrame(this.mapLayoutRaf);
-    if (this.documentMutationTimer) clearTimeout(this.documentMutationTimer);
     if (this.mapSurfaceLoadingSafetyTimer) {
       clearTimeout(this.mapSurfaceLoadingSafetyTimer);
       this.mapSurfaceLoadingSafetyTimer = null;
     }
-    this.documentMutationObserver?.disconnect();
-    this.documentMutationObserver = null;
     this.detachMapLoadingWatchers();
     this.clearIndicatorOverlayLayout();
     this.removePortalHost();
@@ -388,7 +400,14 @@ export default class AgriDashboard extends React.PureComponent<
   private bringPortalHostToFront(): void {
     const host = this.portalHost;
     const surface = this.findSharedLayoutSurface();
-    if (host && surface && host.parentElement === surface) {
+    // Only move when not already last — appendChild on an existing last child
+    // still fires MutationObserver / layout work for no visual gain.
+    if (
+      host &&
+      surface &&
+      host.parentElement === surface &&
+      surface.lastElementChild !== host
+    ) {
       surface.appendChild(host);
     }
   }
@@ -655,6 +674,7 @@ export default class AgriDashboard extends React.PureComponent<
     );
   }
 
+  /** Kept for optional future UI; not driven by document MutationObserver. */
   private updateDashboardLoadingState(): void {
     const dashboardLoading = this.getDashboardLoadingState();
     if (this.state.dashboardLoading !== dashboardLoading) {
@@ -662,49 +682,52 @@ export default class AgriDashboard extends React.PureComponent<
     }
   }
 
-  private setupDocumentObserver(): void {
-    if (typeof MutationObserver === "undefined") return;
-    this.documentMutationObserver = new MutationObserver(
-      this.handleDocumentMutation,
-    );
-    this.documentMutationObserver.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
-  }
-
-  private handleDocumentMutation = (): void => {
-    if (this.documentMutationTimer) clearTimeout(this.documentMutationTimer);
-    this.documentMutationTimer = setTimeout(() => {
-      this.documentMutationTimer = null;
-      const now = Date.now();
-      this.updateDashboardLoadingState();
-      if (now - this.lastMapSlotLayoutAt < 400) return;
-      this.lastMapSlotLayoutAt = now;
-      this.scheduleMapSlotLayout();
-    }, 300);
+  private onWindowResize = (): void => {
+    this.scheduleMapSlotLayout(true);
   };
 
   private ensureLayoutObservers(): void {
     if (!this.resizeListenerAttached) {
-      window.addEventListener("resize", this.scheduleMapSlotLayout, {
+      window.addEventListener("resize", this.onWindowResize, {
         passive: true,
       });
       this.resizeListenerAttached = true;
     }
-    if (this.layoutObserversReady || typeof ResizeObserver === "undefined") {
+    if (typeof ResizeObserver === "undefined") {
       return;
     }
 
-    this.dashboardResizeObserver = new ResizeObserver(() => {
-      this.scheduleMapSlotLayout();
-    });
-
     const root = this.dashboardRootRef.current;
     const slot = this.mapSlotRef.current;
-    if (root) this.dashboardResizeObserver.observe(root);
-    if (slot) this.dashboardResizeObserver.observe(slot);
-    if (root || slot) {
+    if (!root && !slot) return;
+
+    // Create observer once; may attach root before slot exists on first paint.
+    if (!this.dashboardResizeObserver) {
+      this.dashboardResizeObserver = new ResizeObserver(() => {
+        this.scheduleMapSlotLayout(false);
+      });
+    }
+
+    // Observe only dashboard chrome size — never document.body. ArcGIS tile
+    // paints mutate the map DOM constantly; a document MutationObserver that
+    // called view.resize() created a CPU spin loop.
+    if (root) {
+      try {
+        this.dashboardResizeObserver.observe(root);
+      } catch {
+        /* already observing */
+      }
+    }
+    if (slot) {
+      try {
+        this.dashboardResizeObserver.observe(slot);
+      } catch {
+        /* already observing */
+      }
+    }
+    // Ready only when the map slot is watched — otherwise first paint with
+    // root-only would permanently skip slot size changes.
+    if (root && slot) {
       this.layoutObserversReady = true;
     }
   }
@@ -713,11 +736,30 @@ export default class AgriDashboard extends React.PureComponent<
     this.ensureLayoutObservers();
   }
 
-  private scheduleMapSlotLayout = (): void => {
+  /**
+   * Ask the MapView to reflow. Skips when the map-slot pixel size is unchanged
+   * unless `force` (window resize, first mount, map ready).
+   */
+  private scheduleMapSlotLayout = (force = false): void => {
     if (this.mapLayoutRaf) cancelAnimationFrame(this.mapLayoutRaf);
     this.mapLayoutRaf = requestAnimationFrame(() => {
       this.mapLayoutRaf = 0;
-      const view = this.getActiveJimuMapView()?.view as { resize?: () => void } | undefined;
+      const slot = this.mapSlotRef.current;
+      if (slot) {
+        const w = Math.round(slot.clientWidth);
+        const h = Math.round(slot.clientHeight);
+        if (
+          !force &&
+          w === this.lastMapSlotSize.w &&
+          h === this.lastMapSlotSize.h
+        ) {
+          return;
+        }
+        this.lastMapSlotSize = { w, h };
+      }
+      const view = this.getActiveJimuMapView()?.view as
+        | { resize?: () => void }
+        | undefined;
       view?.resize?.();
     });
   };
@@ -1135,6 +1177,7 @@ export default class AgriDashboard extends React.PureComponent<
                   this.embeddedMapReady = true;
                   this.setMapLoading(false);
                   this.setState({ mapError: "" });
+                  this.scheduleMapSlotLayout(true);
                   this.forceUpdate();
                 }}
                 onLoadingChange={(mapLoading) => {

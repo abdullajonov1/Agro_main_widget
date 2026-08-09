@@ -108,6 +108,16 @@ const VEG_AVG_FIELDS = [
   "ndwi_max",
 ];
 
+/** Lighter republic overview: means only (no min/max bands) — ~6 avgs vs 16. */
+export const VEG_AVG_FIELDS_CORE = [
+  "ndvi",
+  "savi",
+  "evi",
+  "rvi",
+  "ci",
+  "ndwi",
+];
+
 export interface VegetationRegionalTimeseriesParams {
   region?: number;
   district?: number;
@@ -126,7 +136,17 @@ export interface VegetationRegionalTimeseriesParams {
   cropIds?: string[];
   /** Optional vegetation status selected in the VH widget. */
   ndviStatus?: string;
+  /**
+   * Subset of VEG_AVG_FIELDS to average. Republic overview should pass
+   * VEG_AVG_FIELDS_CORE to cut ArcGIS outStatistics cost roughly in half.
+   */
+  avgFields?: string[];
 }
+
+const vegetationRegionalTimeseriesCache = new Map<
+  string,
+  Promise<Array<Record<string, any>>>
+>();
 
 /**
  * Regional (aggregate) vegetation index time series — mean of every index
@@ -134,11 +154,24 @@ export interface VegetationRegionalTimeseriesParams {
  * range. Mirrors the shape previously returned by
  * GET /api/v1/vegetation/regional/timeseries: rows keyed by `date` plus the
  * bare index names (ndvi, savi, ...) and `polygon_count`.
+ *
+ * Requires a date window — never runs as `1=1` over the full history table.
  */
 export async function queryVegetationRegionalTimeseries(
   params: VegetationRegionalTimeseriesParams,
 ): Promise<Array<Record<string, any>>> {
-  const { layer } = await getAgriVegetationIndicesLayer();
+  if (!params.startDate || !params.endDate) {
+    agriVegetationLog("regionalTimeseries:SKIP-no-date-window", {
+      region: params.region ?? null,
+      district: params.district ?? null,
+    });
+    return [];
+  }
+
+  const avgFields = (
+    params.avgFields?.length ? params.avgFields : VEG_AVG_FIELDS
+  ).filter((field) => VEG_AVG_FIELDS.includes(field));
+  const fieldsForStats = avgFields.length ? avgFields : VEG_AVG_FIELDS;
 
   const clauses: string[] = [];
   if (params.region != null) {
@@ -152,11 +185,9 @@ export async function queryVegetationRegionalTimeseries(
       `ndvi_status='${escapeAgriVeg(String(params.ndviStatus))}'`,
     );
   }
-  if (params.startDate && params.endDate) {
-    clauses.push(
-      `raster_date >= DATE '${params.startDate}' AND raster_date <= DATE '${params.endDate}'`,
-    );
-  }
+  clauses.push(
+    `raster_date >= DATE '${params.startDate}' AND raster_date <= DATE '${params.endDate}'`,
+  );
   const requestedCropIds = Array.from(
     new Set(
       [...(params.cropIds || []), ...(params.cropId ? [params.cropId] : [])]
@@ -173,40 +204,63 @@ export async function queryVegetationRegionalTimeseries(
         .join(",")})`,
     );
   }
-  const where = clauses.length ? clauses.join(" AND ") : "1=1";
+  const where = clauses.join(" AND ");
+  const cacheKey = `${where}|avg=${fieldsForStats.join(",")}`;
+  const cached = vegetationRegionalTimeseriesCache.get(cacheKey);
+  if (cached) return cached;
 
-  const query = layer.createQuery();
-  query.where = where;
-  query.groupByFieldsForStatistics = ["raster_date"];
-  query.orderByFields = ["raster_date ASC"];
-  query.outStatistics = [
-    ...VEG_AVG_FIELDS.map((field) => ({
-      statisticType: "avg",
-      onStatisticField: field,
-      outStatisticFieldName: `avg_${field}`,
-    })),
-    {
-      statisticType: "count",
-      onStatisticField: "objectid",
-      outStatisticFieldName: "polygon_count",
-    },
-  ] as any;
-  query.returnGeometry = false;
+  const request = (async () => {
+    const { layer } = await getAgriVegetationIndicesLayer();
+    const query = layer.createQuery();
+    query.where = where;
+    query.groupByFieldsForStatistics = ["raster_date"];
+    query.orderByFields = ["raster_date ASC"];
+    query.outStatistics = [
+      ...fieldsForStats.map((field) => ({
+        statisticType: "avg",
+        onStatisticField: field,
+        outStatisticFieldName: `avg_${field}`,
+      })),
+      {
+        statisticType: "count",
+        onStatisticField: "objectid",
+        outStatisticFieldName: "polygon_count",
+      },
+    ] as any;
+    query.returnGeometry = false;
 
-  const result = await layer.queryFeatures(query);
-  const rows = (result?.features ?? []).map((feature: any) =>
-    feature.attributes || {},
-  );
-  return rows.map((row: any) => {
-    const normalized: Record<string, any> = {
-      date: row.raster_date,
-      polygon_count: row.polygon_count ?? 0,
-    };
-    for (const field of VEG_AVG_FIELDS) {
-      normalized[field] = row[`avg_${field}`];
-    }
-    return normalized;
-  });
+    const result = await layer.queryFeatures(query);
+    const rows = (result?.features ?? []).map((feature: any) =>
+      feature.attributes || {},
+    );
+    return rows.map((row: any) => {
+      const normalized: Record<string, any> = {
+        date: row.raster_date,
+        polygon_count: row.polygon_count ?? 0,
+      };
+      for (const field of VEG_AVG_FIELDS) {
+        const avgKey = `avg_${field}`;
+        if (Object.prototype.hasOwnProperty.call(row, avgKey)) {
+          normalized[field] = row[avgKey];
+        } else if (field.endsWith("_min") || field.endsWith("_max")) {
+          // Core-field queries omit min/max — collapse band to the mean.
+          const base = field.replace(/_(min|max)$/, "");
+          normalized[field] = row[`avg_${base}`] ?? null;
+        } else {
+          normalized[field] = null;
+        }
+      }
+      return normalized;
+    });
+  })();
+
+  vegetationRegionalTimeseriesCache.set(cacheKey, request);
+  try {
+    return await request;
+  } catch (err) {
+    vegetationRegionalTimeseriesCache.delete(cacheKey);
+    throw err;
+  }
 }
 
 /** Normalizes an ArcGIS date attribute (epoch ms, Date, or string) to "YYYY-MM-DD". */
@@ -350,7 +404,8 @@ export async function queryVegetationLatestDatesByRegion(
     },
   ] as any;
   query.returnGeometry = false;
-  query.num = 2000;
+  // Year-scoped region×date pairs are small; keep headroom for all viloyats.
+  query.num = 10000;
 
   const request = (async (): Promise<VegetationLatestDateByRegion[]> => {
     const result = await layer.queryFeatures(query);
@@ -831,6 +886,157 @@ export async function queryVegetationStatusCountsByStatus(
     if (!oldestKey) break;
     vegetationStatusStatsCache.delete(oldestKey);
   }
+  try {
+    return await request;
+  } catch (error) {
+    vegetationStatusStatsCache.delete(cacheKey);
+    throw error;
+  }
+}
+
+/**
+ * Republic VH overview: group region scopes by shared latest date, then one
+ * stats query per date (`region IN (...)` + groupBy ndvi_status). Typically
+ * 1–3 round-trips instead of ~14 per-region queries.
+ */
+export async function queryVegetationStatusCountsByRegionScopes(
+  scopes: Array<{ region: number; date: string }>,
+  cropIds?: string[],
+): Promise<VegetationStatusCount[]> {
+  const byDate = new Map<string, number[]>();
+  for (const scope of scopes) {
+    const date = String(scope.date || "").trim();
+    const region = Number(scope.region);
+    if (!date || !Number.isFinite(region)) continue;
+    const list = byDate.get(date) || [];
+    list.push(region);
+    byDate.set(date, list);
+  }
+  if (!byDate.size) return [];
+
+  const cropFilter = Array.from(
+    new Set((cropIds || []).map((v) => String(v).trim()).filter(Boolean)),
+  );
+
+  const batches = await Promise.all(
+    Array.from(byDate.entries()).map(([date, regions]) =>
+      queryVegetationStatusCountsForRegionsOnDate({
+        date,
+        regions: Array.from(new Set(regions)),
+        cropIds: cropFilter.length ? cropFilter : undefined,
+      }),
+    ),
+  );
+  return batches.flat();
+}
+
+async function queryVegetationStatusCountsForRegionsOnDate(params: {
+  date: string;
+  regions: number[];
+  cropIds?: string[];
+}): Promise<VegetationStatusCount[]> {
+  const date = String(params.date || "").trim();
+  const regions = Array.from(
+    new Set(
+      (params.regions || [])
+        .map((r) => Number(r))
+        .filter((r) => Number.isFinite(r)),
+    ),
+  );
+  if (!date || !regions.length) return [];
+
+  if (regions.length === 1) {
+    return queryVegetationStatusCountsByStatus({
+      date,
+      region: regions[0],
+      cropIds: params.cropIds,
+    });
+  }
+
+  const { layer } = await getAgriVegetationIndicesLayer();
+  const clauses: string[] = [
+    dateEqualsClause("raster_date", date),
+    `region IN (${regions.map((r) => `'${escapeAgriVeg(String(r))}'`).join(",")})`,
+  ];
+  const cropFilter = Array.from(
+    new Set((params.cropIds || []).map((v) => String(v).trim()).filter(Boolean)),
+  );
+  if (cropFilter.length === 1) {
+    clauses.push(`crop_id='${escapeAgriVeg(cropFilter[0])}'`);
+  } else if (cropFilter.length > 1) {
+    clauses.push(
+      `crop_id IN (${cropFilter.map((v) => `'${escapeAgriVeg(v)}'`).join(",")})`,
+    );
+  }
+  const where = clauses.join(" AND ");
+  const oidField = String(layer.objectIdField || "objectid");
+  const cacheKey = `status-stats-multi|${where}|oid=${oidField}`;
+  const cached = vegetationStatusStatsCache.get(cacheKey);
+  if (cached) return cached;
+
+  const request = (async (): Promise<VegetationStatusCount[]> => {
+    const query: any = layer.createQuery();
+    query.where = where;
+    query.groupByFieldsForStatistics = ["ndvi_status"];
+    query.orderByFields = ["ndvi_status ASC"];
+    query.outFields = ["ndvi_status"];
+    query.outStatistics = [
+      {
+        statisticType: "count",
+        onStatisticField: oidField,
+        outStatisticFieldName: "row_count",
+      },
+      {
+        statisticType: "sum",
+        onStatisticField: "px_all",
+        outStatisticFieldName: "sum_px_all",
+      },
+    ];
+    query.returnGeometry = false;
+    query.num = 50;
+    query.resultRecordCount = 50;
+
+    const result = await layer.queryFeatures(query);
+    const readAttribute = (
+      attributes: Record<string, unknown>,
+      field: string,
+    ): unknown =>
+      attributes?.[field] ??
+      attributes?.[field.toLowerCase()] ??
+      attributes?.[field.toUpperCase()];
+
+    const out: VegetationStatusCount[] = [];
+    for (const feature of result?.features ?? []) {
+      const attributes = (feature?.attributes || {}) as Record<string, unknown>;
+      const status = String(readAttribute(attributes, "ndvi_status") || "")
+        .trim()
+        .toLowerCase();
+      if (!status) continue;
+      const count = Math.max(
+        0,
+        Number(readAttribute(attributes, "row_count")) || 0,
+      );
+      const pxAll = Math.max(
+        0,
+        Number(readAttribute(attributes, "sum_px_all")) || 0,
+      );
+      if (count <= 0 && pxAll <= 0) continue;
+      out.push({
+        ndvi_status: status,
+        count,
+        areaHa: pxAll * VEG_PIXEL_AREA_HA,
+        uniqueIds: [],
+      });
+    }
+    agriVegetationLog("status-counts:by-status-multi-region", {
+      where,
+      regionCount: regions.length,
+      rowCount: out.length,
+    });
+    return out;
+  })();
+
+  vegetationStatusStatsCache.set(cacheKey, request);
   try {
     return await request;
   } catch (error) {

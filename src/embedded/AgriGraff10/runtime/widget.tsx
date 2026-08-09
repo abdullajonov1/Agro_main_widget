@@ -50,6 +50,7 @@ import {
 import {
   queryVegetationSeriesForUniqueId,
   queryVegetationRegionalTimeseries,
+  VEG_AVG_FIELDS_CORE,
   formatArcgisDateToYmd,
 } from "../../shared/agri-vegetation-data-source";
 import {
@@ -5462,6 +5463,24 @@ export default class AgriGraffWidget extends React.PureComponent<
         String(current?.vh || "") !== filterSnapshot.vh
       );
     };
+
+    // Never hit vegetation with an open date window — that used to become
+    // `1=1` + 16 AVGs and saturate the FeatureServer on cold start.
+    const yearToken =
+      String(filterSnapshot.yil).match(/\b(18|19|20)\d{2}\b/)?.[0] || "";
+    if (!yearToken) {
+      AgriGraffWidget.graffLog("fetchRegionalTimeseries:SKIP-no-year", {
+        yil: filterSnapshot.yil,
+        requestId,
+      });
+      // Keep spinner until Localization broadcasts a year — do not flash empty.
+      this.setState({
+        loadingVegetation: true,
+        vegetationError: null,
+      });
+      return;
+    }
+
     try {
       await this.ensureRegionDistrictForSelection();
       if (isStale()) {
@@ -5562,15 +5581,8 @@ export default class AgriGraffWidget extends React.PureComponent<
         return;
       }
 
-      let startDate: string | undefined;
-      let endDate: string | undefined;
-      if (filterSnapshot.yil) {
-        const year = String(filterSnapshot.yil).match(/\b(18|19|20)\d{2}\b/)?.[0];
-        if (year) {
-          startDate = `${year}-01-01`;
-          endDate = `${year}-12-31`;
-        }
-      }
+      const startDate = `${yearToken}-01-01`;
+      const endDate = `${yearToken}-12-31`;
 
       const snapshotTurlar: string[] = JSON.parse(filterSnapshot.turlar || "[]");
       const selectedTurlar = snapshotTurlar.length
@@ -5655,6 +5667,11 @@ export default class AgriGraffWidget extends React.PureComponent<
       });
       const ndviStatus = VH_TO_NDVI_STATUS[filterSnapshot.vh] || undefined;
       const queryCropIds = cropIds.length ? cropIds : [undefined];
+      // Republic-wide: fewer outStatistics. Viloyat/tuman keep full min/max bands.
+      const avgFields =
+        regionNum !== undefined && Number.isFinite(regionNum)
+          ? undefined
+          : VEG_AVG_FIELDS_CORE;
       const responseGroups = await Promise.all(
         queryCropIds.map((selectedCropId) =>
           queryVegetationRegionalTimeseries({
@@ -5667,6 +5684,7 @@ export default class AgriGraffWidget extends React.PureComponent<
             startDate,
             endDate,
             ndviStatus,
+            avgFields,
           }) as Promise<RegionalTimeseriesRow[]>,
         ),
       );

@@ -390,14 +390,9 @@ export default class AgriIndicatorReserveLand extends React.PureComponent<
     const { yil, viloyat, tuman, uniqueid, lockedViloyat } = this.state;
     const clauses: string[] = [];
 
-    if (yil) {
-      const year = this.extractYear(yil);
-      if (year) clauses.push(`yil LIKE '${this.escapeArcGIS(year)}%'`);
-      else
-        clauses.push(
-          `yil LIKE '%${this.escapeArcGIS(String(yil))}%'`,
-        );
-    }
+    const year = this.extractYear(yil);
+    if (!year) return withEvapoAccessWhere("1=0");
+    clauses.push(`yil LIKE '${this.escapeArcGIS(year)}%'`);
 
     const effectiveViloyat = lockedViloyat || viloyat;
     if (effectiveViloyat) {
@@ -412,13 +407,19 @@ export default class AgriIndicatorReserveLand extends React.PureComponent<
 
     if (uniqueid) clauses.push(this.eqAposSmart("uniqueid", uniqueid));
 
-    return withEvapoAccessWhere(clauses.length ? clauses.join(" AND ") : "1=1");
+    return withEvapoAccessWhere(clauses.join(" AND "));
   }
 
   private fetchValue = async (): Promise<void> => {
-    const { layer, connectionStatus } = this.state;
+    const { layer, connectionStatus, yil } = this.state;
     if (!layer || connectionStatus !== "connected") return;
     if (!this._hasMasterFilter) return;
+
+    // Match Yield/Unused — never query the full table with an empty year.
+    if (!String(yil || "").match(/\b(18|19|20)\d{2}\b/)) {
+      this.setState({ value: null, loading: false, error: null });
+      return;
+    }
 
     const requestId = ++this._requestId;
     this.setState({ error: null, loading: true });
@@ -475,12 +476,12 @@ export default class AgriIndicatorReserveLand extends React.PureComponent<
       });
     } catch (e: any) {
       if (!this._isMounted || requestId !== this._requestId) return;
-      this.setState({ loading: false, error: e?.message || "Query failed" });
+      this.setState({ loading: false, value: null, error: null });
     }
   };
 
   private formatNumber = (num: number | null): string => {
-    if (num === null || num === undefined) return "0";
+    if (num === null || num === undefined) return "-";
     return Math.round(num)
       .toString()
       .replace(/\B(?=(\d{3})+(?!\d))/g, " ");
@@ -502,6 +503,8 @@ export default class AgriIndicatorReserveLand extends React.PureComponent<
 
     const themeClass = isDarkTheme ? "dark-theme" : "light-theme";
     const showBlockingLoader = loading && value == null && !error;
+    const connectionFailed =
+      this.state.connectionStatus === "failed" && !!error && value == null;
 
     return (
       <div
@@ -512,16 +515,16 @@ export default class AgriIndicatorReserveLand extends React.PureComponent<
           <div className="loading-indicator">
             <AgriDashboardSpinner compact size={40} />
           </div>
-        ) : error && value == null ? (
-          <div className="error-container">
-            <div className="error-icon">⚠️</div>
-          </div>
         ) : (
           <div className="widget-content">
             <div className="stat-main">
               <div className="stat-label">{label}</div>
               <div className="stat-value">
-                <AgriAnimatedCount value={value} />
+                {connectionFailed ? (
+                  <span title={String(error || "")}>-</span>
+                ) : (
+                  <AgriAnimatedCount value={value} emptyFallback="-" />
+                )}
                 <span className="unit">{unit}</span>
               </div>
             </div>
