@@ -158,6 +158,54 @@ function reverseIndexFromRgb(r: number, g: number, b: number): number | null {
   return best;
 }
 
+/** Session cache: first click pays network+decode; repeats reuse the canvas. */
+const exportImageCache = new Map<string, Promise<PolygonExportImageResult>>();
+const EXPORT_IMAGE_CACHE_MAX = 12;
+
+function exportImageCacheKey(params: {
+  uniqueid: string;
+  regionId: number;
+  rasterDate: string;
+  indiceType?: VegetationIndiceType;
+  stretch?: "fixed" | "minmax";
+}): string {
+  return [
+    String(params.uniqueid || "").replace(/[{}]/g, ""),
+    params.regionId,
+    params.rasterDate,
+    params.indiceType || "ndvi",
+    params.stretch || "fixed",
+  ].join("|");
+}
+
+function cloneExportCanvas(source: HTMLCanvasElement): HTMLCanvasElement {
+  const copy = document.createElement("canvas");
+  copy.width = source.width;
+  copy.height = source.height;
+  const ctx = copy.getContext("2d");
+  if (ctx) ctx.drawImage(source, 0, 0);
+  return copy;
+}
+
+/**
+ * Best-effort TLS / DNS warmup for api-agri so the first field click does not
+ * pay cold-connection cost on export-image.
+ */
+export function warmPolygonApiConnection(): void {
+  try {
+    void fetch(`${AGRI_POLYGON_API_BASE_URL}/`, {
+      method: "GET",
+      headers: { accept: "*/*" },
+      mode: "cors",
+      cache: "no-store",
+    }).catch(() => {
+      /* ignore — warmup only */
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * GET /v1/polygon/{uniqueid}/export-image, requested with
  * response_format=tiff — fetches the raw GeoTIFF bytes directly (skips the
@@ -174,6 +222,35 @@ export async function fetchPolygonExportImageTiff(params: {
   indiceType?: VegetationIndiceType;
   stretch?: "fixed" | "minmax";
 }): Promise<PolygonExportImageResult> {
+  const cacheKey = exportImageCacheKey(params);
+  let pending = exportImageCache.get(cacheKey);
+  if (!pending) {
+    pending = fetchPolygonExportImageTiffUncached(params).catch((err) => {
+      exportImageCache.delete(cacheKey);
+      throw err;
+    });
+    exportImageCache.set(cacheKey, pending);
+    while (exportImageCache.size > EXPORT_IMAGE_CACHE_MAX) {
+      const oldest = exportImageCache.keys().next().value;
+      if (oldest == null) break;
+      exportImageCache.delete(oldest);
+    }
+  }
+  const result = await pending;
+  // Clone canvas so a later MediaLayer remove/reuse cannot blank a cached entry.
+  return {
+    ...result,
+    canvas: cloneExportCanvas(result.canvas),
+  };
+}
+
+async function fetchPolygonExportImageTiffUncached(params: {
+  uniqueid: string;
+  regionId: number;
+  rasterDate: string;
+  indiceType?: VegetationIndiceType;
+  stretch?: "fixed" | "minmax";
+}): Promise<PolygonExportImageResult> {
   const qs = new URLSearchParams({
     region_id: String(params.regionId),
     raster_date: params.rasterDate,
@@ -184,7 +261,34 @@ export async function fetchPolygonExportImageTiff(params: {
   const url = `${AGRI_POLYGON_API_BASE_URL}/v1/polygon/${encodeURIComponent(params.uniqueid)}/export-image?${qs.toString()}`;
   agriPolygonApiLog("export-image:request", { url, ...params });
 
-  const res = await fetch(url, { headers: { accept: "*/*" } });
+  // Bound hung export-image calls so the map loader cannot stick forever.
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId =
+    controller && typeof setTimeout === "function"
+      ? setTimeout(() => {
+          try {
+            controller.abort();
+          } catch {
+            /* ignore */
+          }
+        }, 25000)
+      : null;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { accept: "*/*" },
+      ...(controller ? { signal: controller.signal } : {}),
+    });
+  } catch (err: any) {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (err?.name === "AbortError") {
+      throw new Error("Export-image so‘rovi vaqtidan oshdi (25s).");
+    }
+    throw err;
+  }
+  if (timeoutId) clearTimeout(timeoutId);
   if (!res.ok) {
     let responseText = '';
     try {
@@ -225,6 +329,17 @@ export async function fetchPolygonExportImageTiff(params: {
   const height = image.getHeight();
   const samplesPerPixel = image.getSamplesPerPixel();
   const pixelCount = width * height;
+  if (
+    !Array.isArray(bbox) ||
+    bbox.length < 4 ||
+    ![bbox[0], bbox[1], bbox[2], bbox[3]].every((n) => Number.isFinite(n)) ||
+    !(bbox[2] > bbox[0]) ||
+    !(bbox[3] > bbox[1]) ||
+    !(width > 0) ||
+    !(height > 0)
+  ) {
+    throw new Error("GeoTIFF bounding box/size invalid");
+  }
 
   let epsgCode: number | null = null;
   try {
@@ -233,8 +348,20 @@ export async function fetchPolygonExportImageTiff(params: {
       Number(geoKeys?.ProjectedCSTypeGeoKey) ||
       Number(geoKeys?.GeographicTypeGeoKey) ||
       null;
+    if (!Number.isFinite(epsgCode as number)) epsgCode = null;
   } catch {
     epsgCode = null;
+  }
+  // Geographic coords without geo-keys: safe default. Projected metres without
+  // an EPSG must not be tagged as the map view SR (causes stretch/misplace).
+  if (epsgCode == null) {
+    const absMax = Math.max(
+      Math.abs(bbox[0]),
+      Math.abs(bbox[1]),
+      Math.abs(bbox[2]),
+      Math.abs(bbox[3]),
+    );
+    if (absMax <= 180) epsgCode = 4326;
   }
 
   let noData: number | null = null;

@@ -1041,7 +1041,7 @@ export default class AgriDashboard extends React.PureComponent<
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
               {this.props.manifest?.label ||
                 this.props.manifest?.name ||
-                "Agro_widgetV1"}
+                "Agro Space Monitoring"}
             </div>
             <div style={{ fontSize: 13, opacity: 0.78 }}>
               {webMapDataSourceId || allDataSources.length > 0

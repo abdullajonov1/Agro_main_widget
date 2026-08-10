@@ -225,9 +225,35 @@ export function extractMapLayerIdFromDsId(dsId: string): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * MapImage "Group Layer" nodes (e.g. title "Agri 2026 republic data").
+ * They often expose a /MapServer/N URL and sometimes createQuery stubs, but
+ * FeatureLayer#load() rejects them: Source type "Group Layer" is not supported.
+ */
+export function isMapImageGroupSublayer(layer: any): boolean {
+  if (!layer) return false;
+  const type = String(layer.type || "").toLowerCase();
+  const sourceType = String(
+    layer.sourceJSON?.type ||
+      layer.resourceInfo?.type ||
+      layer.source?.type ||
+      "",
+  ).toLowerCase();
+  if (sourceType.includes("group")) return true;
+  const kidCount =
+    layer.sublayers?.length ?? layer.sublayers?.toArray?.()?.length ?? 0;
+  if (type === "sublayer" && kidCount > 0) return true;
+  // Nested group folders under MapImage also show up as type "group".
+  if (type === "group") return true;
+  return false;
+}
+
 /** True for FeatureLayer and MapImageLayer sublayers that support query APIs. */
 export function isQueryableFieldLayer(layer: any): boolean {
   if (!layer) return false;
+  // Never treat Group Layer folders as queryable — even if they expose
+  // createQuery while hydrating (FeatureLayer load then hard-fails).
+  if (isMapImageGroupSublayer(layer)) return false;
   // Prefer queryFeatures — some MapImage Sublayer builds expose createQuery +
   // queryFeatures but not queryFeatureCount until fully hydrated.
   if (typeof layer.createQuery === "function") {
@@ -237,9 +263,7 @@ export function isQueryableFieldLayer(layer: any): boolean {
   // Leaf MapImage sublayer that can still be queried once load() finishes.
   const type = String(layer.type || "").toLowerCase();
   if (type === "sublayer") {
-    const hasKids =
-      (layer.sublayers?.length ?? layer.sublayers?.toArray?.()?.length ?? 0) > 0;
-    if (!hasKids && (layer.url || layer.id != null)) {
+    if (layer.url || layer.id != null) {
       return (
         typeof layer.queryFeatures === "function" ||
         typeof layer.createQuery === "function"
@@ -373,17 +397,20 @@ export function isMapImageOwnedLayer(layer: any): boolean {
  * detached clients instead of the live layer.
  */
 const detachedQueryLayerCache = new Map<string, any>();
+/** URLs that FeatureLayer#load() rejected (Group Layer / bad endpoint). */
+const detachedQueryLayerFailedUrls = new Set<string>();
 
 export async function getDetachedQueryLayerForUrl(url: string): Promise<any | null> {
   const cleanUrl = String(url || "").trim().replace(/\/+$/, "");
   if (!cleanUrl) return null;
+  if (detachedQueryLayerFailedUrls.has(cleanUrl)) return null;
   // FeatureLayer requires a layer endpoint (.../MapServer/0 or FeatureServer/N).
-  // MapServer roots (e.g. "Agri 2026 republic data") fail #load() and only
-  // spam the console — skip them instead of constructing a doomed client.
+  // MapServer roots fail #load() and only spam the console.
   if (
     !/\/(?:MapServer|FeatureServer)\/\d+$/i.test(cleanUrl) &&
     !/\/FeatureServer$/i.test(cleanUrl)
   ) {
+    detachedQueryLayerFailedUrls.add(cleanUrl);
     return null;
   }
   let layer = detachedQueryLayerCache.get(cleanUrl);
@@ -395,12 +422,15 @@ export async function getDetachedQueryLayerForUrl(url: string): Promise<any | nu
       layer = new FeatureLayer({ url: cleanUrl });
       detachedQueryLayerCache.set(cleanUrl, layer);
     } catch {
+      detachedQueryLayerFailedUrls.add(cleanUrl);
       return null;
     }
   }
   try {
     await layer.load();
   } catch {
+    // Group Layer endpoints and other unsupported sources — never retry.
+    detachedQueryLayerFailedUrls.add(cleanUrl);
     detachedQueryLayerCache.delete(cleanUrl);
     return null;
   }
@@ -409,7 +439,46 @@ export async function getDetachedQueryLayerForUrl(url: string): Promise<any | nu
 
 /** Detached query client for a live layer/sublayer (null when it has no URL). */
 export async function getDetachedQueryLayerFor(liveLayer: any): Promise<any | null> {
+  if (!liveLayer || isMapImageGroupSublayer(liveLayer)) return null;
   return getDetachedQueryLayerForUrl(String(liveLayer?.url || ""));
+}
+
+/**
+ * Collect every queryable leaf under a MapImage root / group / FeatureLayer.
+ * Unlike getQueryableLayer (first match only), this walks the full tree so
+ * district/year leaves under "Agri 2026 republic data" stay clickable.
+ */
+export function collectQueryableFieldLayers(root: any): any[] {
+  const out: any[] = [];
+  const seen = new Set<any>();
+  const walk = (node: any) => {
+    if (!node || seen.has(node)) return;
+    seen.add(node);
+    // Always descend into group / map-image folders first.
+    if (isMapImageGroupSublayer(node)) {
+      const kids =
+        node?.allSublayers?.toArray?.() ||
+        node?.sublayers?.toArray?.() ||
+        [];
+      if (Array.isArray(kids)) {
+        for (const kid of kids) walk(kid);
+      }
+      return;
+    }
+    if (isQueryableFieldLayer(node)) {
+      out.push(node);
+      return;
+    }
+    const kids =
+      node?.allSublayers?.toArray?.() ||
+      node?.sublayers?.toArray?.() ||
+      [];
+    if (Array.isArray(kids)) {
+      for (const kid of kids) walk(kid);
+    }
+  };
+  walk(root);
+  return out;
 }
 
 /** @deprecated Prefer findQueryableLayerOnMapByUrl — numeric ids collide across Map Services. */
@@ -950,7 +1019,7 @@ export function syncRegionYearLayerVisibility(
       ).map((l: any) => `${l?.type || "?"}:${l?.title || l?.id || "?"}`);
       // eslint-disable-next-line no-console
       console.warn(
-        "[Agro_widgetV1] No region-year field layers matched selection",
+        "[Agro_widgetV2] No region-year field layers matched selection",
         { yil, viloyat, mapLayerTitles: titles },
       );
     } catch {

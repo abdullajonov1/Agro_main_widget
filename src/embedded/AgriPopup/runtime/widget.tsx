@@ -46,12 +46,15 @@ import {
   logPointerStack,
 } from "../../shared/evapo-map-click-debug";
 import {
+  collectQueryableFieldLayers,
   extractMapLayerIdFromDsId,
   findQueryableLayerOnMapByUrl,
   findQueryableLayerOnMapById,
   getAllFeatureLayersFromMap,
+  getDetachedQueryLayerFor,
   getEvapoLayerMapKey,
   getQueryableLayer,
+  isMapImageGroupSublayer,
   isMapImageOwnedLayer,
   isQueryableFieldLayer,
   normalizeQueryableLayerUrl,
@@ -464,31 +467,18 @@ export default class AgriPolygon extends React.PureComponent<
    * queryFeatures on a live MapImage Sublayer rehydrates it and can clear its
    * runtime definitionExpression, which makes the map export (and briefly
    * paint) every district's fields until the filter guard restores it.
+   *
+   * Shared helper also skips MapServer roots and Group Layer folders
+   * ("Agri 2026 republic data") that FeatureLayer cannot load.
    */
   private getDetachedQueryLayer = async (
     layer: any,
   ): Promise<__esri.FeatureLayer | null> => {
+    if (!layer || isMapImageGroupSublayer(layer)) return null;
+    const detached = await getDetachedQueryLayerFor(layer);
+    if (!detached) return null;
     const url = String(layer?.url || "").trim().replace(/\/+$/, "");
-    if (!url) return null;
-    // Skip MapServer roots (e.g. "Agri 2026 republic data") — FeatureLayer
-    // #load() fails and only floods the console.
-    if (
-      !/\/(?:MapServer|FeatureServer)\/\d+$/i.test(url) &&
-      !/\/FeatureServer$/i.test(url)
-    ) {
-      return null;
-    }
-    let detached = this._queryOnlyLayers.get(url);
-    if (!detached) {
-      detached = new FeatureLayer({ url });
-      this._queryOnlyLayers.set(url, detached);
-    }
-    try {
-      await detached.load();
-    } catch {
-      this._queryOnlyLayers.delete(url);
-      return null;
-    }
+    if (url) this._queryOnlyLayers.set(url, detached);
     return detached as unknown as __esri.FeatureLayer;
   };
 
@@ -2051,6 +2041,8 @@ export default class AgriPolygon extends React.PureComponent<
 
   private isAgriculturalFieldLayer(layer: any): boolean {
     if (!layer) return false;
+    // Group Layer folders are not field polygons — never accept them for click.
+    if (isMapImageGroupSublayer(layer)) return false;
     // Prefer queryable layers, but title/url identity is enough to accept a
     // live MapImage leaf that is still hydrating its query methods.
     const identity = `${layer.title || ""} ${layer.url || ""} ${layer.parent?.title || ""}`.toLowerCase();
@@ -2061,6 +2053,7 @@ export default class AgriPolygon extends React.PureComponent<
     const fields: any[] = Array.isArray(layer.fields) ? layer.fields : [];
     const names = new Set(fields.map((field) => String(field?.name || "").toLowerCase()));
     if (names.has("uniqueid") || names.has("crop_id") || names.has("turi")) return true;
+    // looksAgri alone is OK for a hydrating leaf; groups already rejected above.
     return looksAgri;
   }
 
@@ -2094,14 +2087,10 @@ export default class AgriPolygon extends React.PureComponent<
       liveMapLayers.push(layer as __esri.FeatureLayer);
     };
     for (const root of liveRoots) {
-      const direct = getQueryableLayer(root);
-      if (direct) pushLive(direct);
-      const nested =
-        (root as any)?.allSublayers?.toArray?.() ||
-        (root as any)?.sublayers?.toArray?.() ||
-        [];
-      for (const sub of nested) {
-        pushLive(getQueryableLayer(sub) || sub);
+      // Walk groups fully — never push the Group Layer node itself
+      // (FeatureLayer#load fails with unsupported-type "Group Layer").
+      for (const leaf of collectQueryableFieldLayers(root)) {
+        pushLive(leaf);
       }
     }
 

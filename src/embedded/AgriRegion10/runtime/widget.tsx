@@ -748,17 +748,28 @@ export default class AgriRegion extends React.PureComponent<
     );
     const nextVh = String(f.vh || "").trim();
     const nextFilterPieByVh = Boolean(f.filterPieByVh);
-    const nextVhUniqueids: string[] | null = nextVh
-      ? Array.isArray(d.vhUniqueids)
-        ? Array.from(
-            new Set<string>(
-              d.vhUniqueids
-                .map((value: unknown) => String(value || "").trim())
-                .filter(Boolean),
-            ),
-          )
-        : null
-      : null;
+    const nextTuman = String(f.tuman || "").trim();
+    // Prefer viloyat-wide chart ids from Localization. Map/Graff still get
+    // district-scoped `vhUniqueids`; using those here collapsed "Tumanlar
+    // kesimida" to the selected tuman after VH.
+    const normalizeIdList = (raw: unknown): string[] | null => {
+      if (!Array.isArray(raw)) return null;
+      return Array.from(
+        new Set<string>(
+          raw
+            .map((value: unknown) => String(value || "").trim())
+            .filter(Boolean),
+        ),
+      );
+    };
+    const regionChartIds = normalizeIdList(d.vhRegionChartUniqueids);
+    const nextVhUniqueids: string[] | null = !nextVh
+      ? null
+      : regionChartIds != null
+        ? regionChartIds
+        : !nextTuman
+          ? normalizeIdList(d.vhUniqueids)
+          : null;
     const next = {
       yil: f.yil || "",
       viloyat: f.viloyat || "",
@@ -1205,14 +1216,24 @@ export default class AgriRegion extends React.PureComponent<
    * Resolve uniqueids for Region aggregates when VH is active.
    * - null → still loading (do not query as 1=0)
    * - [] → confirmed empty
-   * - When VH was selected before ekin turi, prefer Pie bridge ids (VH-wide)
-   *   so a crop-scoped empty map list does not blank "Tumanlar kesimida".
+   * These ids must be viloyat-wide (from vhRegionChartUniqueids). Never use
+   * district-scoped map / Pie ids — that hid every tuman except the selected
+   * one after VH (e.g. only Mirzaobod while other Sirdaryo tumans vanished).
+   * Pie bridge is map-geography scoped (includes tuman); use it only when no
+   * tuman is selected and Localization has not published region-chart ids yet.
    */
   private resolveVhUniqueidsForQuery = (): string[] | null => {
-    const { vh, vhUniqueids, filterPieByVh } = this.state.currentFilters;
+    const { vh, vhUniqueids, filterPieByVh, tuman } =
+      this.state.currentFilters;
     if (!vh) return null;
     if (Array.isArray(vhUniqueids) && vhUniqueids.length > 0) {
       return vhUniqueids;
+    }
+    // With a tuman selected, never fall back to Pie/map uniqueids — they are
+    // district-scoped and collapse "Tumanlar kesimida" to a single bar.
+    // Stay pending (null) until vhRegionChartUniqueids arrives.
+    if (String(tuman || "").trim()) {
+      return Array.isArray(vhUniqueids) ? vhUniqueids : null;
     }
     if (filterPieByVh) {
       const pieIds = getPieVhFilterUniqueIds();

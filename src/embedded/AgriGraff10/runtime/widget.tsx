@@ -36,6 +36,7 @@ import { agriNoDataLabel } from "../../../shared/agriNoDataLabel";
 import { translateUzbekPlaceToEnglish, type EnglishPlaceKind } from "../../shared/english-place-names";
 import {
   getQueryableLayer,
+  getDetachedQueryLayerFor,
   getMapImageParentLayer,
   isMapImageOwnedLayer,
   withEvapoAccessWhere,
@@ -48,14 +49,15 @@ import {
   buildSpatialJoinWhere,
 } from "../../shared/agri-table-data-source";
 import {
+  getAgriVegetationIndicesLayer,
   queryVegetationSeriesForUniqueId,
   queryVegetationRegionalTimeseries,
-  VEG_AVG_FIELDS_CORE,
   formatArcgisDateToYmd,
 } from "../../shared/agri-vegetation-data-source";
 import {
   fetchPolygonAvailableDates,
   fetchPolygonExportImageTiff,
+  warmPolygonApiConnection,
   type VegetationIndiceType,
 } from "../../shared/agri-polygon-api-source";
 import "./AgriGraff.css";
@@ -143,6 +145,99 @@ interface RegionalTimeseriesRow {
   polygon_count: number;
 }
 
+/** Chart accepts polygon data (raster_date) or regional data normalized to same shape */
+type ChartVegetationRow =
+  | VegetationIndex
+  | (RegionalTimeseriesRow & { raster_date: string });
+
+const REPUBLIC_TIMESERIES_INDEX_FIELDS = [
+  "ndvi",
+  "savi",
+  "evi",
+  "rvi",
+  "ci",
+  "ndwi",
+] as const;
+
+type RepublicTimeseriesIndexField =
+  (typeof REPUBLIC_TIMESERIES_INDEX_FIELDS)[number];
+
+const isRepublicTimeseriesIndexField = (
+  value: string,
+): value is RepublicTimeseriesIndexField =>
+  (REPUBLIC_TIMESERIES_INDEX_FIELDS as readonly string[]).includes(value);
+
+/** Normalize regional/chart row date to YYYY-MM-DD for merge keys. */
+const regionalTimeseriesRowToYmd = (row: {
+  date?: unknown;
+  raster_date?: unknown;
+}): string | null => {
+  const rawValue: unknown = row.raster_date ?? row.date;
+  const rawDate = String(rawValue ?? "").trim();
+  if (!rawDate) return null;
+  let parsedDate: Date;
+  if (typeof rawValue === "number" || /^\d{10,13}$/.test(rawDate)) {
+    const epoch = Number(rawValue);
+    parsedDate = new Date(rawDate.length === 10 ? epoch * 1000 : epoch);
+  } else {
+    parsedDate = new Date(rawDate);
+  }
+  if (Number.isNaN(parsedDate.getTime())) return null;
+  return parsedDate.toISOString().slice(0, 10);
+};
+
+/**
+ * Merge newly fetched index columns into an existing regional chart series
+ * by date. Never overwrites a finite existing value with null/NaN from a
+ * partial (single-index) republic query.
+ */
+const mergeRegionalTimeseriesFieldsIntoChart = (
+  existing: ChartVegetationRow[],
+  incoming: RegionalTimeseriesRow[],
+  fields: readonly string[],
+): ChartVegetationRow[] => {
+  const byDate = new Map<string, Record<string, any>>();
+  for (const row of existing) {
+    const ymd = regionalTimeseriesRowToYmd(row as any);
+    if (!ymd) continue;
+    byDate.set(ymd, {
+      ...(row as any),
+      date: ymd,
+      raster_date: ymd,
+    });
+  }
+  for (const row of incoming) {
+    const ymd = regionalTimeseriesRowToYmd(row);
+    if (!ymd) continue;
+    const prev = byDate.get(ymd) || {
+      date: ymd,
+      raster_date: ymd,
+      polygon_count: 0,
+    };
+    for (const field of fields) {
+      if (!Object.prototype.hasOwnProperty.call(row, field)) continue;
+      const nextValue = (row as any)[field];
+      const nextNum = nextValue == null ? Number.NaN : Number(nextValue);
+      const prevNum =
+        prev[field] == null ? Number.NaN : Number(prev[field]);
+      // Partial queries leave other indices null — keep prior finite values.
+      if (!Number.isFinite(nextNum) && Number.isFinite(prevNum)) continue;
+      prev[field] = nextValue;
+    }
+    if (row.polygon_count != null) {
+      prev.polygon_count = row.polygon_count;
+    }
+    prev.date = ymd;
+    prev.raster_date = ymd;
+    byDate.set(ymd, prev);
+  }
+  return Array.from(byDate.values())
+    .sort(
+      (a, b) =>
+        new Date(String(a.date)).getTime() - new Date(String(b.date)).getTime(),
+    ) as ChartVegetationRow[];
+};
+
 const mergeRegionalTimeseriesGroups = (
   groups: RegionalTimeseriesRow[][],
 ): RegionalTimeseriesRow[] => {
@@ -228,11 +323,6 @@ const mergeRegionalTimeseriesGroups = (
     return bucket as RegionalTimeseriesRow;
   });
 };
-
-/** Chart accepts polygon data (raster_date) or regional data normalized to same shape */
-type ChartVegetationRow =
-  | VegetationIndex
-  | (RegionalTimeseriesRow & { raster_date: string });
 
 /** Map precalculated ndvi_status values on the polygon layer to VH category labels (must match AgriFilter/AgriBar). */
 const NDVI_STATUS_TO_VH: Record<string, string> = {
@@ -740,6 +830,12 @@ export default class AgriGraffWidget extends React.PureComponent<
   private _regionalTimeseriesRequestKey = "";
   /** Signature of the regional series currently shown in vegetationData. */
   private _regionalTimeseriesAppliedKey = "";
+  /**
+   * Index fields already loaded for `_regionalTimeseriesAppliedKey` (republic
+   * incremental fetch). Cleared on scope change, polygon mode, or failed fetch.
+   * Viloyat/tuman full queries mark every CORE field as loaded.
+   */
+  private _regionalTimeseriesLoadedAvgFields = new Set<string>();
   /** True after a graph fetch finishes (success/empty/error) — prevents no-data flash. */
   private _hasCompletedGraphFetch = false;
   /** True after a table fetch finishes (success/empty/error) — prevents no-data flash. */
@@ -1362,7 +1458,7 @@ export default class AgriGraffWidget extends React.PureComponent<
     if (polygonMode && incoming && incoming !== current) {
       this._polygonSelectionOrigin = "map";
       this._selectionCommittedAt = Date.now();
-      this.removeVegetationImageOverlay();
+      this.cancelVegetationImageOverlay();
       // Session-scoped 404 cache is keyed by uniqueid|region|date|index —
       // clear when the polygon changes so a transient miss on one field
       // cannot permanently block the same date/index on the next field.
@@ -1435,7 +1531,7 @@ export default class AgriGraffWidget extends React.PureComponent<
     if (!polygonMode && !incoming && current) {
       this._polygonSelectionOrigin = null;
       this._selectionCommittedAt = 0;
-      this.removeVegetationImageOverlay();
+      this.cancelVegetationImageOverlay();
       this.clearMapSelectionGraphics(this.state.activeMapView?.view);
       const restoreExtent = this._extentBeforeTableSelection;
       this._extentBeforeTableSelection = null;
@@ -1493,7 +1589,7 @@ export default class AgriGraffWidget extends React.PureComponent<
     this._selectionCommittedAt = 0;
     this._pendingScrollUniqueid = null;
     this._selectionPageResolveToken += 1;
-    this.removeVegetationImageOverlay();
+    this.cancelVegetationImageOverlay();
     this.clearMapSelectionGraphics(this.state.activeMapView?.view);
     const restoreExtent = this._extentBeforeTableSelection;
     this._extentBeforeTableSelection = null;
@@ -1874,7 +1970,7 @@ export default class AgriGraffWidget extends React.PureComponent<
       },
         () => {
           if (shouldClearPolygonSelection) {
-            this.removeVegetationImageOverlay();
+            this.cancelVegetationImageOverlay();
             this.clearMapSelectionGraphics(this.state.activeMapView?.view);
             try {
               document.dispatchEvent(
@@ -1974,13 +2070,14 @@ export default class AgriGraffWidget extends React.PureComponent<
       if (url) {
         let detached = this._detachedSpatialQueryLayers.get(url);
         if (!detached) {
-          detached = new FeatureLayer({ url });
-          this._detachedSpatialQueryLayers.set(url, detached);
+          try {
+            detached = await getDetachedQueryLayerFor(spatialLayer);
+            if (detached) this._detachedSpatialQueryLayers.set(url, detached);
+          } catch {
+            detached = null as any;
+          }
         }
-        try {
-          await detached.load();
-          queryLayer = detached;
-        } catch {}
+        if (detached) queryLayer = detached;
       }
       const q = queryLayer.createQuery();
       q.outFields = ["*"];
@@ -2204,7 +2301,7 @@ export default class AgriGraffWidget extends React.PureComponent<
       }
 
       if (gid) {
-        this.removeVegetationImageOverlay();
+        this.cancelVegetationImageOverlay();
 
         this.setState({
           selecteduniqueid: gid,
@@ -2233,7 +2330,7 @@ export default class AgriGraffWidget extends React.PureComponent<
     if (!selecteduniqueid) return;
 
     this.clearMapSelectionGraphics(activeMapView?.view);
-    this.removeVegetationImageOverlay();
+    this.cancelVegetationImageOverlay();
 
     const restoreExtent = this._extentBeforeTableSelection;
     this._extentBeforeTableSelection = null;
@@ -2758,7 +2855,7 @@ export default class AgriGraffWidget extends React.PureComponent<
 
     if (!this.filtersChanged(this.state.regionalFilters, nextRegional)) return;
 
-    this.removeVegetationImageOverlay();
+    this.cancelVegetationImageOverlay();
 
     this.setState(
       {
@@ -3729,7 +3826,7 @@ export default class AgriGraffWidget extends React.PureComponent<
 
       // A different polygon is now selected — any raster overlay/date
       // selection from the previous one no longer applies.
-      this.removeVegetationImageOverlay();
+      this.cancelVegetationImageOverlay();
 
       this._polygonSelectionOrigin = "map";
       this._selectionCommittedAt = Date.now();
@@ -4120,6 +4217,20 @@ export default class AgriGraffWidget extends React.PureComponent<
     this.initializeTheme();
     this.refreshFiltersFromConfig();
 
+    // Warm cold paths so the first field's index raster is not paying
+    // TLS + FeatureLayer + projection engine startup on click.
+    try {
+      warmPolygonApiConnection();
+      void getAgriVegetationIndicesLayer().catch(() => {
+        /* best-effort */
+      });
+      void projection.load().catch(() => {
+        /* best-effort */
+      });
+    } catch {
+      /* ignore */
+    }
+
     document.addEventListener(
       "agriV11ThemeToggled",
       this.handleThemeChange as EventListener,
@@ -4349,7 +4460,7 @@ export default class AgriGraffWidget extends React.PureComponent<
   componentWillUnmount() {
     this._isMounted = false;
 
-    this.removeVegetationImageOverlay();
+    this.cancelVegetationImageOverlay();
     // Clear the bottom-left date/index indicator so it doesn't keep
     // showing stale info once this chart is gone.
     try {
@@ -5053,7 +5164,7 @@ export default class AgriGraffWidget extends React.PureComponent<
       // must not attempt queryExtent here.
 
       // Only clear the row selection / graph data – keep regional filters intact
-      this.removeVegetationImageOverlay();
+      this.cancelVegetationImageOverlay();
       this._polygonSelectionOrigin = null;
       this._selectionCommittedAt = 0;
       this.setState(
@@ -5119,11 +5230,14 @@ export default class AgriGraffWidget extends React.PureComponent<
         if (url) {
           let detached = this._detachedSpatialQueryLayers.get(url);
           if (!detached) {
-            detached = new FeatureLayer({ url });
-            this._detachedSpatialQueryLayers.set(url, detached);
+            try {
+              detached = await getDetachedQueryLayerFor(spatialLayer);
+              if (detached) this._detachedSpatialQueryLayers.set(url, detached);
+            } catch {
+              detached = null as any;
+            }
           }
-          await detached.load();
-          queryLayer = detached;
+          if (detached) queryLayer = detached;
         }
         const q = queryLayer.createQuery();
         q.outFields = ["*"];
@@ -5179,7 +5293,7 @@ export default class AgriGraffWidget extends React.PureComponent<
       // ✅✅✅ KEY FIX: Set selecteduniqueid AFTER successful query
       // A different polygon is now selected — any raster overlay/date
       // selection from the previous one no longer applies.
-      this.removeVegetationImageOverlay();
+      this.cancelVegetationImageOverlay();
       // Row-click selection is authoritative "now" — mark it so a
       // late-arriving stale external (AgriPopup) notification for an
       // earlier map click can't silently override it afterwards.
@@ -5399,13 +5513,17 @@ export default class AgriGraffWidget extends React.PureComponent<
   private applyGraphData = (
     nextData: ChartVegetationRow[],
     extra?: Partial<AgriGraffWidgetState>,
+    options?: { animate?: boolean },
   ): void => {
     this._hasCompletedGraphFetch = true;
+    const animate = options?.animate !== false;
     this.setState({
       vegetationData: nextData,
       loadingVegetation: false,
       vegetationError: null,
-      chartAnimKey: (this.state.chartAnimKey || 0) + 1,
+      ...(animate
+        ? { chartAnimKey: (this.state.chartAnimKey || 0) + 1 }
+        : {}),
       ...(extra || {}),
     } as any);
   };
@@ -5413,15 +5531,14 @@ export default class AgriGraffWidget extends React.PureComponent<
   /** Fetch regional timeseries when no polygon is selected (uses viloyat, optional tuman, optional yil for date range). */
   private fetchRegionalTimeseries = async () => {
     // Polygon mode owns vegetationData — never start (or apply) a regional
-    // overwrite while a uniqueid is selected.
+    // overwrite while a uniqueid is selected. Do NOT touch
+    // loadingVegetation / _hasCompletedGraphFetch here: that used to mark the
+    // graph "complete + empty" while fetchVegetationData was still in flight,
+    // flashing "Ma'lumot topilmadi" even though the popup already had indices.
     if (this.state.selecteduniqueid) {
       AgriGraffWidget.graffLog("fetchRegionalTimeseries:SKIP-polygon-selected", {
         uniqueid: this.state.selecteduniqueid,
       });
-      if (this.state.viewMode === "graph" && this.state.loadingVegetation) {
-        this._hasCompletedGraphFetch = true;
-        this.setState({ loadingVegetation: false });
-      }
       return;
     }
 
@@ -5547,6 +5664,7 @@ export default class AgriGraffWidget extends React.PureComponent<
       if (unresolvedScope) {
         this._regionalTimeseriesRequestKey = "";
         this._regionalTimeseriesAppliedKey = "";
+        this._regionalTimeseriesLoadedAvgFields.clear();
         const { language } = this.state;
         const vegetationError =
           language === "en"
@@ -5608,6 +5726,7 @@ export default class AgriGraffWidget extends React.PureComponent<
                 : "Tanlangan ekin kodi aniqlanmadi.";
         this._regionalTimeseriesRequestKey = "";
         this._regionalTimeseriesAppliedKey = "";
+        this._regionalTimeseriesLoadedAvgFields.clear();
         this._hasCompletedGraphFetch = true;
         this.setState({
           vegetationData: [],
@@ -5624,6 +5743,7 @@ export default class AgriGraffWidget extends React.PureComponent<
         ? this.makeRegionDistrictKey(this.normalizeApos(filterSnapshot.turi))
         : "";
 
+      // Geographic / filter scope only (not selected chart indices).
       requestKey = JSON.stringify({
         region: regionNum !== undefined && Number.isFinite(regionNum) ? regionNum : null,
         district: effectiveDistrictNum ?? null,
@@ -5633,17 +5753,47 @@ export default class AgriGraffWidget extends React.PureComponent<
         vh: filterSnapshot.vh || null,
         ndviStatus: VH_TO_NDVI_STATUS[filterSnapshot.vh] || null,
       });
+      if (requestKey !== this._regionalTimeseriesAppliedKey) {
+        // New geography/year/crop/VH — drop partial index cache for the old scope.
+        this._regionalTimeseriesLoadedAvgFields.clear();
+      }
+
+      const isRepublicScope = !(
+        regionNum !== undefined && Number.isFinite(regionNum)
+      );
+      const desiredRepublicFields: RepublicTimeseriesIndexField[] = Array.from(
+        new Set(
+          (this.state.selectedIndices || ["ndvi"])
+            .map((key) => String(key).toLowerCase())
+            .filter(isRepublicTimeseriesIndexField),
+        ),
+      );
+      if (!desiredRepublicFields.length) {
+        desiredRepublicFields.push("ndvi");
+      }
+
       // Same resolved scope already showing — finish loading without refetch.
+      // Republic: also require every currently selected index to be loaded
+      // (SAVI/EVI toggles fetch only the missing columns).
       // Do NOT skip merely because another in-flight call shares this key:
       // that older call may still become stale and never clear the spinner.
+      const republicFieldsReady =
+        !isRepublicScope ||
+        desiredRepublicFields.every((field) =>
+          this._regionalTimeseriesLoadedAvgFields.has(field),
+        );
       if (
         requestKey === this._regionalTimeseriesAppliedKey &&
         this.state.vegetationData.length > 0 &&
-        !this.state.vegetationError
+        !this.state.vegetationError &&
+        republicFieldsReady
       ) {
         AgriGraffWidget.graffLog("fetchRegionalTimeseries:SKIP-already-applied", {
           requestKey,
           existingRowCount: this.state.vegetationData.length,
+          isRepublicScope,
+          desiredRepublicFields,
+          loadedFields: Array.from(this._regionalTimeseriesLoadedAvgFields),
         });
         this._hasCompletedGraphFetch = true;
         this.setState({ loadingVegetation: false });
@@ -5651,6 +5801,22 @@ export default class AgriGraffWidget extends React.PureComponent<
       }
       this._regionalTimeseriesRequestKey = requestKey;
       this.setState({ loadingVegetation: true, vegetationError: null });
+
+      // Republic: only AVG the selected (still-missing) indices.
+      // Viloyat/tuman: full outStatistics including min/max bands.
+      const missingRepublicFields = desiredRepublicFields.filter(
+        (field) => !this._regionalTimeseriesLoadedAvgFields.has(field),
+      );
+      const avgFields: string[] | undefined = isRepublicScope
+        ? missingRepublicFields.length
+          ? missingRepublicFields
+          : desiredRepublicFields
+        : undefined;
+      const canAugmentExisting =
+        isRepublicScope &&
+        requestKey === this._regionalTimeseriesAppliedKey &&
+        this._regionalTimeseriesLoadedAvgFields.size > 0 &&
+        this.state.vegetationData.length > 0;
 
       AgriGraffWidget.graffLog("fetchRegionalTimeseries:request", {
         viloyat: filterSnapshot.viloyat,
@@ -5663,15 +5829,14 @@ export default class AgriGraffWidget extends React.PureComponent<
         resolvedCropId: cropId,
         turiKeyFoundInMap: turiKey ? turiKey in this._turiToCropId : null,
         vilKeyFoundInMap: vilKey ? vilKey in this._viloyatToRegion : null,
+        isRepublicScope,
+        desiredRepublicFields,
+        avgFields: avgFields || "full",
+        canAugmentExisting,
         requestId,
       });
       const ndviStatus = VH_TO_NDVI_STATUS[filterSnapshot.vh] || undefined;
       const queryCropIds = cropIds.length ? cropIds : [undefined];
-      // Republic-wide: fewer outStatistics. Viloyat/tuman keep full min/max bands.
-      const avgFields =
-        regionNum !== undefined && Number.isFinite(regionNum)
-          ? undefined
-          : VEG_AVG_FIELDS_CORE;
       const responseGroups = await Promise.all(
         queryCropIds.map((selectedCropId) =>
           queryVegetationRegionalTimeseries({
@@ -5703,6 +5868,7 @@ export default class AgriGraffWidget extends React.PureComponent<
         rowCount: data.length,
         duplicateDateRowsMerged: Math.max(0, rawRowCount - data.length),
         validNdviRowCount: validNdviRows.length,
+        avgFields: avgFields || "full",
         ndviRange: ndviValues.length
           ? {
               min: Math.min(...ndviValues),
@@ -5732,11 +5898,36 @@ export default class AgriGraffWidget extends React.PureComponent<
         .sort(
           (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
         );
-      const chartRows: ChartVegetationRow[] = sorted.map((row) => ({
-        ...row,
-        raster_date: row.date,
-      }));
+      const fetchedFields = avgFields?.length
+        ? avgFields
+        : [...REPUBLIC_TIMESERIES_INDEX_FIELDS];
+      const chartRows: ChartVegetationRow[] = canAugmentExisting
+        ? mergeRegionalTimeseriesFieldsIntoChart(
+            this.state.vegetationData,
+            sorted,
+            fetchedFields,
+          )
+        : sorted.map((row) => ({
+            ...row,
+            raster_date: row.date,
+          }));
       this._regionalTimeseriesAppliedKey = requestKey;
+      if (isRepublicScope) {
+        // First scope paint: mark requested fields even when empty (no rows).
+        // Augment: only mark when the server returned rows — empty augment
+        // must remain retryable (do not permanently skip a missing index).
+        if (!canAugmentExisting || sorted.length > 0) {
+          fetchedFields.forEach((field) => {
+            if (isRepublicTimeseriesIndexField(field)) {
+              this._regionalTimeseriesLoadedAvgFields.add(field);
+            }
+          });
+        }
+      } else {
+        REPUBLIC_TIMESERIES_INDEX_FIELDS.forEach((field) => {
+          this._regionalTimeseriesLoadedAvgFields.add(field);
+        });
+      }
       this.applyGraphData(chartRows, {
         dateRangeStartIndex: null,
         dateRangeEndIndex: null,
@@ -5750,6 +5941,7 @@ export default class AgriGraffWidget extends React.PureComponent<
         this._regionalTimeseriesRequestKey = "";
       }
       this._regionalTimeseriesAppliedKey = "";
+      this._regionalTimeseriesLoadedAvgFields.clear();
       this._hasCompletedGraphFetch = true;
       this.setState({
         vegetationData: [],
@@ -6095,13 +6287,20 @@ export default class AgriGraffWidget extends React.PureComponent<
         ? this.state.regionalRegionCode
         : null;
 
-    const regionNum =
-      storedRegionCode ??
-      (/^\d+$/.test(effectiveViloyat) && effectiveViloyat
+    // Prefer name→region mapping over cached regionalRegionCode — the cache
+    // can briefly belong to the previous viloyat during rapid clicks, which
+    // makes /available-dates return [] and blank the polygon chart.
+    const mappedRegionFromName =
+      /^\d+$/.test(effectiveViloyat) && effectiveViloyat
         ? Number(effectiveViloyat)
         : vilKey
           ? this._viloyatToRegion[vilKey]
-          : undefined);
+          : undefined;
+    const regionNum =
+      mappedRegionFromName !== undefined &&
+      Number.isFinite(mappedRegionFromName)
+        ? mappedRegionFromName
+        : storedRegionCode ?? undefined;
 
     return regionNum !== undefined && Number.isFinite(regionNum)
       ? regionNum
@@ -6302,6 +6501,45 @@ export default class AgriGraffWidget extends React.PureComponent<
    * to remove, even though the old layer is still sitting on the map. */
   private static readonly VEGETATION_IMAGE_LAYER_ID =
     "agri-graff-vegetation-image-overlay";
+
+  /** Drop map-surface + polygon-image loaders owned by a vegetation raster request. */
+  private clearVegetationImageSurfaceLoading = (requestId: number): void => {
+    if (requestId !== this._vegetationImageRequestId) return;
+    if (this.state.polygonImageLoading) {
+      this.setState({ polygonImageLoading: false });
+    }
+    document.dispatchEvent(
+      new CustomEvent("agriMapSurfaceLoading", {
+        detail: {
+          loading: false,
+          source: "AgriGraffWidget",
+          requestId,
+          reason: "vegetation-raster",
+        },
+      }),
+    );
+  };
+
+  /**
+   * Invalidate any in-flight export-image fetch, remove the overlay, and
+   * always release the map loader. Use on deselect / polygon switch — not
+   * inside applyVegetationImageOverlay while swapping the active layer.
+   */
+  private cancelVegetationImageOverlay = (): void => {
+    const requestId = ++this._vegetationImageRequestId;
+    this.removeVegetationImageOverlay();
+    this.setState({ polygonImageLoading: false, polygonImageError: null });
+    document.dispatchEvent(
+      new CustomEvent("agriMapSurfaceLoading", {
+        detail: {
+          loading: false,
+          source: "AgriGraffWidget",
+          requestId,
+          reason: "vegetation-raster-cancel",
+        },
+      }),
+    );
+  };
 
   private removeVegetationImageOverlay = (): void => {
     this.detachVegetationRasterHover();
@@ -6518,14 +6756,16 @@ export default class AgriGraffWidget extends React.PureComponent<
         uniqueid,
         rasterDate,
       });
+      this.cancelVegetationImageOverlay();
       this.setState({
-        polygonImageLoading: false,
         polygonImageError:
           "Viloyat kodi topilmadi — indeks rasmini yuklab bo‘lmadi.",
       });
       return;
     }
 
+    // Bumping requestId orphans any previous in-flight finally cleanup — every
+    // exit path below MUST clear the map surface loader while still current.
     const requestId = ++this._vegetationImageRequestId;
     const cleanId = uniqueid.replace(/[{}]/g, "");
     const advertisedDates = this.state.polygonAvailableDates || [];
@@ -6534,7 +6774,7 @@ export default class AgriGraffWidget extends React.PureComponent<
       String(rasterDate || "").slice(0, 10);
     const rasterKey = `${cleanId}|${regionId}|${normalizedDate}|${indiceType}`;
 
-    AgriGraffWidget.graffLog('chartPoint:raster-overlay-start', {
+    AgriGraffWidget.graffLog("chartPoint:raster-overlay-start", {
       requestId,
       uniqueid: cleanId,
       regionId,
@@ -6545,42 +6785,10 @@ export default class AgriGraffWidget extends React.PureComponent<
       currentSelecteduniqueid: this.state.selecteduniqueid,
     });
 
-    // Avoid requests for dates the polygon pipeline never produced.
-    if (
-      advertisedDates.length > 0 &&
-      !advertisedDates.includes(normalizedDate)
-    ) {
-      this.removeVegetationImageOverlay();
-      this.setState({ polygonImageLoading: false, polygonImageError: null });
-      AgriGraffWidget.graffLog("applyVegetationImageOverlay:SKIP-unavailable-date", {
-        uniqueid: cleanId,
-        rasterDate: normalizedDate,
-        requestedDate: String(rasterDate || "").slice(0, 10),
-        indiceType,
-      });
-      return;
-    }
-
-    // available-dates is not index-specific. Cache index/date combinations
-    // which export-image has explicitly confirmed as missing.
-    if (this._missingVegetationRasterKeys.has(rasterKey)) {
-      this.removeVegetationImageOverlay();
-      this.setState({ polygonImageLoading: false, polygonImageError: null });
-      AgriGraffWidget.graffLog("applyVegetationImageOverlay:SKIP-known-missing", {
-        uniqueid: cleanId,
-        rasterDate: normalizedDate,
-        indiceType,
-      });
-      return;
-    }
     // The requestId counter alone only catches a NEWER applyVegetationImageOverlay
     // call superseding an older one — it says nothing about whether the
-    // polygon this fetch was FOR is still even selected. If the user
-    // switches to a different polygon without triggering another image
-    // fetch (e.g. hasn't clicked a date on the new one yet), the counter
-    // never gets bumped again, so this stale fetch's result would otherwise
-    // pass the check and render the OLD polygon's raster on top of the
-    // newly selected one. Checking selecteduniqueid directly closes that gap.
+    // polygon this fetch was FOR is still even selected. Checking
+    // selecteduniqueid directly closes that gap.
     const stillCurrent = (): boolean => {
       if (!this._isMounted || requestId !== this._vegetationImageRequestId)
         return false;
@@ -6590,20 +6798,49 @@ export default class AgriGraffWidget extends React.PureComponent<
       );
       return currentClean === cleanId;
     };
-    this.setState({ polygonImageLoading: true, polygonImageError: null });
-    document.dispatchEvent(
-      new CustomEvent("agriMapSurfaceLoading", {
-        detail: {
-          loading: true,
-          source: "AgriGraffWidget",
-          requestId,
-          reason: "vegetation-raster",
-        },
-      }),
-    );
 
     try {
-      AgriGraffWidget.graffLog('chartPoint:raster-api-request', {
+      // Avoid requests for dates the polygon pipeline never produced.
+      if (
+        advertisedDates.length > 0 &&
+        !advertisedDates.includes(normalizedDate)
+      ) {
+        this.removeVegetationImageOverlay();
+        this.setState({ polygonImageLoading: false, polygonImageError: null });
+        AgriGraffWidget.graffLog(
+          "applyVegetationImageOverlay:SKIP-unavailable-date",
+          {
+            uniqueid: cleanId,
+            rasterDate: normalizedDate,
+            requestedDate: String(rasterDate || "").slice(0, 10),
+            indiceType,
+          },
+        );
+        return;
+      }
+
+      // available-dates is not index-specific. Cache index/date combinations
+      // which export-image has explicitly confirmed as missing.
+      if (this._missingVegetationRasterKeys.has(rasterKey)) {
+        this.removeVegetationImageOverlay();
+        this.setState({ polygonImageLoading: false, polygonImageError: null });
+        AgriGraffWidget.graffLog(
+          "applyVegetationImageOverlay:SKIP-known-missing",
+          {
+            uniqueid: cleanId,
+            rasterDate: normalizedDate,
+            indiceType,
+          },
+        );
+        return;
+      }
+
+      // Do NOT flip the full-map surface loader for rasters — that blur/scale
+      // made the first field click feel "stretched" for the whole wait.
+      // Chart already painted; overlay arrives when the TIFF is ready.
+      this.setState({ polygonImageLoading: true, polygonImageError: null });
+
+      AgriGraffWidget.graffLog("chartPoint:raster-api-request", {
         requestId,
         uniqueid: cleanId,
         regionId,
@@ -6618,7 +6855,7 @@ export default class AgriGraffWidget extends React.PureComponent<
         stretch: "minmax",
       });
 
-      AgriGraffWidget.graffLog('chartPoint:raster-api-response', {
+      AgriGraffWidget.graffLog("chartPoint:raster-api-response", {
         requestId,
         uniqueid: cleanId,
         rasterDate: normalizedDate,
@@ -6631,30 +6868,91 @@ export default class AgriGraffWidget extends React.PureComponent<
       });
 
       if (!stillCurrent()) {
-        AgriGraffWidget.graffLog("applyVegetationImageOverlay:SKIP-stale-selection", {
-          uniqueid: cleanId,
-          rasterDate,
-          currentSelecteduniqueid: this.state.selecteduniqueid,
-        });
+        AgriGraffWidget.graffLog(
+          "applyVegetationImageOverlay:SKIP-stale-selection",
+          {
+            uniqueid: cleanId,
+            rasterDate,
+            currentSelecteduniqueid: this.state.selecteduniqueid,
+          },
+        );
         return;
       }
 
       const [minX, minY, maxX, maxY] = result.bbox;
-      const spatialReference = result.epsgCode
-        ? new SpatialReference({ wkid: result.epsgCode })
-        : activeMapView.view.spatialReference;
+      if (
+        ![minX, minY, maxX, maxY].every((n) => Number.isFinite(n)) ||
+        !(maxX > minX) ||
+        !(maxY > minY) ||
+        !(result.width > 0) ||
+        !(result.height > 0)
+      ) {
+        throw new Error("GeoTIFF georeference/bbox invalid");
+      }
 
-      const extent = new Extent({
+      // Never treat projected-metre coords as the view SR (Web Mercator) —
+      // that misplaces/stretches the MediaLayer until it looks broken.
+      const absMax = Math.max(
+        Math.abs(minX),
+        Math.abs(minY),
+        Math.abs(maxX),
+        Math.abs(maxY),
+      );
+      let epsgCode = result.epsgCode;
+      if (
+        (epsgCode == null || !Number.isFinite(epsgCode)) &&
+        absMax <= 180
+      ) {
+        epsgCode = 4326;
+      }
+      if (epsgCode == null || !Number.isFinite(epsgCode)) {
+        throw new Error(
+          "GeoTIFF CRS (EPSG) topilmadi — indeks rasmini joylashtirib bo‘lmadi.",
+        );
+      }
+
+      const nativeSr = new SpatialReference({ wkid: Number(epsgCode) });
+      let overlayExtent = new Extent({
         xmin: minX,
         ymin: minY,
         xmax: maxX,
         ymax: maxY,
-        spatialReference,
+        spatialReference: nativeSr,
       });
+
+      // MediaLayer stretches linearly in the view SR. Project first so small
+      // field rasters keep a stable aspect instead of being warped through
+      // on-the-fly reprojection of native CRS corners.
+      const viewSr = activeMapView.view.spatialReference;
+      if (
+        viewSr?.wkid &&
+        Number(viewSr.wkid) !== Number(nativeSr.wkid)
+      ) {
+        try {
+          await projection.load();
+          const projected = projection.project(
+            overlayExtent,
+            viewSr,
+          ) as __esri.Extent;
+          if (
+            projected &&
+            Number.isFinite(projected.xmin) &&
+            Number.isFinite(projected.ymin) &&
+            projected.xmax > projected.xmin &&
+            projected.ymax > projected.ymin
+          ) {
+            overlayExtent = projected;
+          }
+        } catch {
+          /* keep native extent; ArcGIS may still reproject */
+        }
+      }
 
       const imageElement = new ImageElement({
         image: result.canvas,
-        georeference: new ExtentAndRotationGeoreference({ extent }),
+        georeference: new ExtentAndRotationGeoreference({
+          extent: overlayExtent,
+        }),
       });
 
       this.removeVegetationImageOverlay();
@@ -6668,79 +6966,41 @@ export default class AgriGraffWidget extends React.PureComponent<
       activeMapView.view.map.add(mediaLayer);
       this._vegetationImageLayer = mediaLayer;
 
-      // Keep the map loader visible until ArcGIS has created and finished
-      // drawing the new raster layer, not merely until the API response ends.
+      // Attach as soon as the layer is on the map — do not wait up to 2.5s for
+      // layerView.updating (first MediaLayer often stays "updating" longer).
       try {
-        await mediaLayer.load();
-        const layerView = await activeMapView.view.whenLayerView(mediaLayer);
-        if (layerView?.updating) {
-          await new Promise<void>((resolve) => {
-            let settled = false;
-            let handle: { remove?: () => void } | null = null;
-            const finish = () => {
-              if (settled) return;
-              settled = true;
-              handle?.remove?.();
-              resolve();
-            };
-            handle = layerView.watch("updating", (updating: boolean) => {
-              if (!updating) finish();
-            });
-            setTimeout(finish, 8000);
-          });
-        }
+        void mediaLayer.load();
         await new Promise<void>((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
         );
       } catch {
-        // Layer addition succeeded; do not fail the raster just because an
-        // ArcGIS draw-completion notification was unavailable.
+        /* draw can finish without load() acknowledgement */
       }
 
+      if (!stillCurrent()) {
+        this.removeVegetationImageOverlay();
+        return;
+      }
 
-      if (result.values && result.values.length === result.width * result.height) {
-        let sampleXmin = minX;
-        let sampleYmin = minY;
-        let sampleXmax = maxX;
-        let sampleYmax = maxY;
-        let sampleSr = spatialReference;
-        const viewSr = activeMapView.view.spatialReference;
-        try {
-          if (
-            viewSr?.wkid &&
-            spatialReference?.wkid &&
-            Number(viewSr.wkid) !== Number(spatialReference.wkid)
-          ) {
-            await projection.load();
-            const projected = projection.project(extent, viewSr) as __esri.Extent;
-            if (projected) {
-              sampleXmin = projected.xmin;
-              sampleYmin = projected.ymin;
-              sampleXmax = projected.xmax;
-              sampleYmax = projected.ymax;
-              sampleSr = viewSr;
-            }
-          }
-        } catch {
-          /* keep native TIFF SR; hover may be unavailable if CRS differs */
-        }
-
+      if (
+        result.values &&
+        result.values.length === result.width * result.height
+      ) {
         this._vegetationRasterSample = {
           values: result.values,
           width: result.width,
           height: result.height,
-          xmin: sampleXmin,
-          ymin: sampleYmin,
-          xmax: sampleXmax,
-          ymax: sampleYmax,
-          spatialReference: sampleSr,
+          xmin: overlayExtent.xmin,
+          ymin: overlayExtent.ymin,
+          xmax: overlayExtent.xmax,
+          ymax: overlayExtent.ymax,
+          spatialReference: overlayExtent.spatialReference || viewSr || nativeSr,
         };
         this.attachVegetationRasterHover(activeMapView.view);
       } else {
         this._vegetationRasterSample = null;
       }
 
-      if (!this._isMounted) return;
       this.setState({ polygonImageLoading: false, polygonImageError: null });
 
       AgriGraffWidget.graffLog("applyVegetationImageOverlay:added", {
@@ -6750,12 +7010,16 @@ export default class AgriGraffWidget extends React.PureComponent<
         width: result.width,
         height: result.height,
         bbox: result.bbox,
-        epsgCode: result.epsgCode,
+        epsgCode,
+        overlayWkId: overlayExtent.spatialReference?.wkid ?? null,
         hasHoverValues: Boolean(result.values),
       });
     } catch (err: any) {
       if (!stillCurrent()) return;
-      if (Number(err?.status) === 404 || /HTTP\s+404/i.test(String(err?.message || err))) {
+      if (
+        Number(err?.status) === 404 ||
+        /HTTP\s+404/i.test(String(err?.message || err))
+      ) {
         this._missingVegetationRasterKeys.add(rasterKey);
         this.removeVegetationImageOverlay();
       }
@@ -6775,30 +7039,85 @@ export default class AgriGraffWidget extends React.PureComponent<
         polygonImageError: err?.message || "Расм юклана олмади",
       });
     } finally {
-      if (requestId === this._vegetationImageRequestId) {
-        document.dispatchEvent(
-          new CustomEvent("agriMapSurfaceLoading", {
-            detail: {
-              loading: false,
-              source: "AgriGraffWidget",
-              requestId,
-              reason: "vegetation-raster",
-            },
-          }),
-        );
-      }
+      // Clears orphaned loaders from early skips that bumped requestId, and
+      // always releases the surface loader for the active request.
+      this.clearVegetationImageSurfaceLoading(requestId);
     }
+  };
+
+  /**
+   * Sort polygon vegetation rows and pick the chart's selected date/index.
+   * When `availableDates` is non-empty, stamp API-canonical YMD on each row.
+   */
+  private preparePolygonGraphSeries = (
+    rows: VegetationIndex[],
+    availableDates: string[],
+  ): {
+    sorted: VegetationIndex[];
+    nextDate: string | null;
+    nextIndexKey: VegetationIndiceType | null;
+    fingerprint: string;
+  } => {
+    const dates = availableDates || [];
+    const sorted = rows
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(a.raster_date).getTime() - new Date(b.raster_date).getTime(),
+      );
+    if (!sorted.length) {
+      return {
+        sorted,
+        nextDate: null,
+        nextIndexKey: null,
+        fingerprint: "",
+      };
+    }
+
+    const lastRow = sorted[sorted.length - 1];
+    const lastDate =
+      this.resolveAgainstAvailableDates(lastRow.raster_date, dates) ||
+      this.formatLocalDateYmd(new Date(lastRow.raster_date)) ||
+      String(lastRow.raster_date || "").slice(0, 10);
+    const indexKey = (this.state.selectedIndices?.[0] ||
+      "ndvi") as VegetationIndiceType;
+
+    // Prefer the date already chosen (chart click / NDVI chevrons).
+    const existingDate = (this.state.selectedNdviDate || "").trim();
+    const dateStillAvailable = existingDate
+      ? sorted.some((row) => {
+          const ymd =
+            this.resolveAgainstAvailableDates(row.raster_date, dates) ||
+            this.formatLocalDateYmd(new Date(row.raster_date)) ||
+            String(row.raster_date || "").slice(0, 10);
+          return ymd === existingDate;
+        })
+      : false;
+    const nextDate = dateStillAvailable ? existingDate : lastDate || null;
+    const existingIndexKey = this.state.selectedChartIndexKey;
+    const selectedIndices = this.state.selectedIndices || [];
+    const nextIndexKey = (nextDate
+      ? existingIndexKey && selectedIndices.includes(existingIndexKey)
+        ? existingIndexKey
+        : indexKey
+      : null) as VegetationIndiceType | null;
+
+    const fingerprint = sorted
+      .map(
+        (row) =>
+          this.resolveAgainstAvailableDates(row.raster_date, dates) ||
+          this.formatLocalDateYmd(new Date(row.raster_date)) ||
+          String(row.raster_date || "").slice(0, 10),
+      )
+      .join("|");
+
+    return { sorted, nextDate, nextIndexKey, fingerprint };
   };
 
   private fetchVegetationData = async () => {
     const { selecteduniqueid } = this.state;
 
-
-
-
-
     if (!selecteduniqueid) {
-
       this._hasCompletedGraphFetch = true;
       this.setState({
         vegetationError:
@@ -6812,6 +7131,11 @@ export default class AgriGraffWidget extends React.PureComponent<
     // Invalidate any in-flight regional chart fetch so its later response
     // cannot clobber this polygon's available-dates-filtered series.
     this._regionalTimeseriesRequestId++;
+    // Polygon series replaces regional data — never SKIP-already-applied
+    // with stale regional keys after the polygon chart is cleared.
+    this._regionalTimeseriesRequestKey = "";
+    this._regionalTimeseriesAppliedKey = "";
+    this._regionalTimeseriesLoadedAvgFields.clear();
     // Allow completion in table mode too — row selection must still auto-pick
     // the latest date and apply the polygon raster overlay. Switch-to-table
     // already bumps _vegetationDataRequestId to cancel in-flight work.
@@ -6824,141 +7148,204 @@ export default class AgriGraffWidget extends React.PureComponent<
       const cleanId = selecteduniqueid.replace(/[{}]/g, "");
       const regionId = this.resolveCurrentRegionId();
       const year = this.resolveCurrentYear();
+      const availableDatesAttempted =
+        regionId !== undefined && year !== undefined;
       AgriGraffWidget.graffLog("fetchVegetationData:request", {
         uniqueid: cleanId,
         regionId,
         year,
+        progressive: true,
       });
 
-      // /available-dates (api-agri) is the authoritative source for which
-      // raster_date values were actually processed by the pipeline for this
-      // polygon+region+year. The chart still needs numeric index values,
-      // which that endpoint doesn't return, so we keep querying
-      // agri_vegetation_indices directly for values and then filter those
-      // rows down to just the dates /available-dates confirms — this is the
-      // "switch the source" behavior: available-dates decides which points
-      // exist on the graph, not whatever happens to be in the ArcGIS table.
-      let availableDatesFailed = false;
-      const availableDatesAttempted = regionId !== undefined && year !== undefined;
-      const [data, availableDates] = await Promise.all([
-        queryVegetationSeriesForUniqueId(cleanId) as Promise<VegetationIndex[]>,
-        availableDatesAttempted
-          ? fetchPolygonAvailableDates(cleanId, regionId, year).catch((err) => {
-              availableDatesFailed = true;
-              AgriGraffWidget.graffLog("fetchVegetationData:available-dates-FAILED", {
-                uniqueid: cleanId,
-                error: String(err?.message || err),
-              });
-              return [] as string[];
-            })
-          : Promise.resolve([] as string[]),
-      ]);
+      // ── Phase 1: ArcGIS series only — unblock Index chart ASAP ──────────
+      // Do NOT await /available-dates here. That REST call used to gate the
+      // whole loader even when FeatureServer rows were already in hand.
+      const data = (await queryVegetationSeriesForUniqueId(
+        cleanId,
+      )) as VegetationIndex[];
 
-      AgriGraffWidget.graffLog("fetchVegetationData:response", {
+      AgriGraffWidget.graffLog("fetchVegetationData:series-response", {
         uniqueid: cleanId,
         rowCount: data.length,
-        availableDatesCount: availableDates.length,
-        availableDatesAttempted,
-        availableDatesFailed,
+        requestId,
       });
+
+      if (isStale()) return;
+
+      if (!data.length) {
+        this.cancelVegetationImageOverlay();
+        this.applyGraphData([], {
+          selectedNdviDate: null,
+          selectedChartIndexKey: null,
+          polygonAvailableDates: [],
+        });
+        return;
+      }
+
+      const firstPass = this.preparePolygonGraphSeries(data, []);
+      let paintedDate = firstPass.nextDate;
+      let paintedIndex = firstPass.nextIndexKey;
+      let paintedFingerprint = firstPass.fingerprint;
+
+      // Kick TIFF download/decode before React paints the chart so the first
+      // field click overlaps network with chart render (shared cache promise).
+      if (
+        !isStale() &&
+        paintedDate &&
+        paintedIndex &&
+        regionId !== undefined
+      ) {
+        void fetchPolygonExportImageTiff({
+          uniqueid: cleanId,
+          regionId,
+          rasterDate: paintedDate,
+          indiceType: paintedIndex,
+          stretch: "minmax",
+        }).catch(() => {
+          /* applyVegetationImageOverlay handles errors */
+        });
+      }
+
+      this.applyGraphData(firstPass.sorted, {
+        dateRangeStartIndex: null,
+        dateRangeEndIndex: null,
+        selectedNdviDate: firstPass.nextDate,
+        selectedChartIndexKey: firstPass.nextIndexKey,
+      });
+
+      if (
+        !isStale() &&
+        paintedDate &&
+        paintedIndex &&
+        this.state.selecteduniqueid
+      ) {
+        void this.applyVegetationImageOverlay(
+          this.state.selecteduniqueid,
+          paintedDate,
+          paintedIndex,
+        );
+      }
+
+      // ── Phase 2: available-dates refine (non-blocking for first paint) ──
+      if (!availableDatesAttempted) return;
+
+      let availableDates: string[] = [];
+      let availableDatesFailed = false;
+      try {
+        availableDates = await fetchPolygonAvailableDates(
+          cleanId,
+          regionId as number,
+          year as number,
+        );
+      } catch (err: any) {
+        availableDatesFailed = true;
+        AgriGraffWidget.graffLog(
+          "fetchVegetationData:available-dates-FAILED",
+          {
+            uniqueid: cleanId,
+            error: String(err?.message || err),
+          },
+        );
+        availableDates = [];
+      }
 
       if (isStale()) return;
 
       this.setState({ polygonAvailableDates: availableDates });
 
-      // Trust /available-dates as the filter only when we actually got a
-      // real response for it; if it was skipped (no region/year resolved
-      // yet) or the request failed, fall back to the unfiltered ArcGIS rows
-      // so the graph doesn't go blank on a transient API error.
-      const shouldFilterByAvailableDates =
-        availableDatesAttempted && !availableDatesFailed;
-      const availableDatesSet = shouldFilterByAvailableDates
-        ? new Set(availableDates)
-        : null;
-      const scopedData = availableDatesSet
-        ? data
-            .map((row) => {
-              const matched = this.resolveAgainstAvailableDates(
-                row.raster_date,
-                availableDates,
-              );
-              if (!matched || !availableDatesSet.has(matched)) return null;
-              // Stamp the API-canonical YMD so chart clicks request the
-              // same date export-image expects (not a timezone-shifted day).
-              return { ...row, raster_date: matched };
-            })
-            .filter((row): row is VegetationIndex => row != null)
-        : data;
+      // Empty/failed dates: keep Phase-1 ArcGIS series (never blank the chart).
+      if (availableDatesFailed || !availableDates.length) {
+        AgriGraffWidget.graffLog(
+          "fetchVegetationData:KEEP-phase1-no-available-dates",
+          {
+            uniqueid: cleanId,
+            availableDatesFailed,
+            availableDatesCount: availableDates.length,
+          },
+        );
+        return;
+      }
 
-      if (isStale()) return;
+      const availableDatesSet = new Set(availableDates);
+      let scopedData = data
+        .map((row) => {
+          const matched = this.resolveAgainstAvailableDates(
+            row.raster_date,
+            availableDates,
+          );
+          if (!matched || !availableDatesSet.has(matched)) return null;
+          return { ...row, raster_date: matched };
+        })
+        .filter((row): row is VegetationIndex => row != null);
 
-      if (!scopedData || scopedData.length === 0) {
-        this.removeVegetationImageOverlay();
-        this.applyGraphData([], {
-          selectedNdviDate: null,
-          selectedChartIndexKey: null,
+      if (!scopedData.length) {
+        AgriGraffWidget.graffLog(
+          "fetchVegetationData:FALLBACK-unfiltered-arcgis",
+          {
+            uniqueid: cleanId,
+            regionId,
+            year,
+            arcgisRowCount: data.length,
+            availableDatesCount: availableDates.length,
+          },
+        );
+        return;
+      }
+
+      const refined = this.preparePolygonGraphSeries(
+        scopedData,
+        availableDates,
+      );
+
+      // No material change — avoid chart remount / overlay re-fetch.
+      if (
+        refined.fingerprint === paintedFingerprint &&
+        refined.nextDate === paintedDate &&
+        refined.nextIndexKey === paintedIndex
+      ) {
+        AgriGraffWidget.graffLog("fetchVegetationData:refine-noop", {
+          uniqueid: cleanId,
+          rowCount: refined.sorted.length,
         });
         return;
       }
 
-      // Sort by date ascending
-      const sorted = scopedData.sort(
-        (a, b) =>
-          new Date(a.raster_date).getTime() - new Date(b.raster_date).getTime(),
+      this.applyGraphData(
+        refined.sorted,
+        {
+          dateRangeStartIndex: null,
+          dateRangeEndIndex: null,
+          polygonAvailableDates: availableDates,
+          selectedNdviDate: refined.nextDate,
+          selectedChartIndexKey: refined.nextIndexKey,
+        },
+        { animate: false },
       );
 
-      const lastRow = sorted[sorted.length - 1];
-      const lastDate =
-        this.resolveAgainstAvailableDates(
-          lastRow.raster_date,
-          availableDates,
-        ) ||
-        this.formatLocalDateYmd(new Date(lastRow.raster_date)) ||
-        String(lastRow.raster_date || "").slice(0, 10);
-      const indexKey = (this.state.selectedIndices?.[0] ||
-        "ndvi") as VegetationIndiceType;
-
-      // Prefer the date already chosen (chart click / NDVI chevrons), even if
-      // the user was on the table tab when they stepped days — switching back
-      // to the line chart must not snap to the latest observation.
-      const existingDate = (this.state.selectedNdviDate || "").trim();
-      const dateStillAvailable = existingDate
-        ? sorted.some((row) => {
-            const ymd =
-              this.resolveAgainstAvailableDates(
-                row.raster_date,
-                availableDates,
-              ) ||
-              this.formatLocalDateYmd(new Date(row.raster_date)) ||
-              String(row.raster_date || "").slice(0, 10);
-            return ymd === existingDate;
-          })
-        : false;
-      const nextDate = dateStillAvailable ? existingDate : lastDate || null;
-      const existingIndexKey = this.state.selectedChartIndexKey;
-      const selectedIndices = this.state.selectedIndices || [];
-      const nextIndexKey = (nextDate
-        ? existingIndexKey && selectedIndices.includes(existingIndexKey)
-          ? existingIndexKey
-          : indexKey
-        : null) as VegetationIndiceType | null;
-
-      this.applyGraphData(sorted, {
-        dateRangeStartIndex: null,
-        dateRangeEndIndex: null,
-        polygonAvailableDates: availableDates,
-        selectedNdviDate: nextDate,
-        selectedChartIndexKey: nextIndexKey,
-      });
-      if (!isStale() && nextDate && this.state.selecteduniqueid && nextIndexKey) {
-        this.applyVegetationImageOverlay(
+      const dateOrIndexChanged =
+        refined.nextDate !== paintedDate ||
+        refined.nextIndexKey !== paintedIndex;
+      if (
+        !isStale() &&
+        dateOrIndexChanged &&
+        refined.nextDate &&
+        refined.nextIndexKey &&
+        this.state.selecteduniqueid
+      ) {
+        void this.applyVegetationImageOverlay(
           this.state.selecteduniqueid,
-          nextDate,
-          nextIndexKey,
+          refined.nextDate,
+          refined.nextIndexKey,
         );
       }
 
-
+      AgriGraffWidget.graffLog("fetchVegetationData:refined", {
+        uniqueid: cleanId,
+        phase1Rows: data.length,
+        refinedRows: refined.sorted.length,
+        nextDate: refined.nextDate,
+        dateOrIndexChanged,
+      });
     } catch (error: any) {
       if (isStale()) return;
 
@@ -6994,7 +7381,12 @@ export default class AgriGraffWidget extends React.PureComponent<
           selectedNdviDate,
           selectedIndices,
           selectedChartIndexKey,
+          viewMode,
         } = this.state;
+        // Republic regional chart: fetch any newly enabled index columns on demand.
+        if (!selecteduniqueid && viewMode === "graph") {
+          void this.fetchRegionalTimeseries();
+        }
         if (!selecteduniqueid || !selectedNdviDate) return;
         // Overlay follows the chart-selected index. Only refresh when that
         // index was toggled off the series list (fall back to primary).
@@ -7025,10 +7417,17 @@ export default class AgriGraffWidget extends React.PureComponent<
       "evi",
       "ndwi",
     ];
-    this.setState((prev) => {
-      const isAll = allKeys.every((k) => prev.selectedIndices.includes(k));
-      return { selectedIndices: isAll ? ["ndvi"] : allKeys };
-    });
+    this.setState(
+      (prev) => {
+        const isAll = allKeys.every((k) => prev.selectedIndices.includes(k));
+        return { selectedIndices: isAll ? ["ndvi"] : allKeys };
+      },
+      () => {
+        if (!this.state.selecteduniqueid && this.state.viewMode === "graph") {
+          void this.fetchRegionalTimeseries();
+        }
+      },
+    );
   };
 
   private localizeRuntimeMessage = (value: unknown): string => {
@@ -7841,7 +8240,7 @@ export default class AgriGraffWidget extends React.PureComponent<
             reason: 'same-date-and-index-toggle-off',
             overlayPresent: Boolean(this._vegetationImageLayer),
           });
-          this.removeVegetationImageOverlay();
+          this.cancelVegetationImageOverlay();
         }
         return;
       }

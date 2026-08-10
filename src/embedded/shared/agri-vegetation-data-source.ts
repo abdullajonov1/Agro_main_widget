@@ -67,6 +67,12 @@ function escapeAgriVeg(value: string): string {
   return String(value ?? "").replace(/'/g, "''");
 }
 
+/** In-flight / session cache so AgriPopup + AgriGraff share one FeatureServer hit. */
+const vegetationSeriesByUniqueIdCache = new Map<
+  string,
+  Promise<Array<Record<string, any>>>
+>();
+
 /**
  * One polygon's full vegetation index time series, ordered by date —
  * mirrors the shape previously returned by GET /api/v1/vegetation/uniqueid/{id}.
@@ -77,16 +83,44 @@ export async function queryVegetationSeriesForUniqueId(
   const raw = String(uniqueId ?? "").trim();
   if (!raw) return [];
 
-  const { layer } = await getAgriVegetationIndicesLayer();
-  const query = layer.createQuery();
-  query.where = `uniqueid='${escapeAgriVeg(raw)}'`;
-  query.outFields = ["*"];
-  query.returnGeometry = false;
-  query.orderByFields = ["raster_date ASC"];
-  query.num = 2000;
+  const clean = raw.replace(/[{}]/g, "");
+  const cacheKey = clean || raw;
+  const cached = vegetationSeriesByUniqueIdCache.get(cacheKey);
+  if (cached) return cached;
 
-  const result = await layer.queryFeatures(query);
-  return (result?.features ?? []).map((f: any) => ({ ...(f.attributes || {}) }));
+  const request = (async () => {
+    const variants = Array.from(
+      new Set(
+        [raw, clean, clean ? `{${clean}}` : ""]
+          .map((v) => String(v || "").trim())
+          .filter(Boolean),
+      ),
+    );
+
+    const { layer } = await getAgriVegetationIndicesLayer();
+    // One query with OR — avoids sequential empty round-trips on brace mismatch.
+    const query = layer.createQuery();
+    query.where = variants
+      .map((candidate) => `uniqueid='${escapeAgriVeg(candidate)}'`)
+      .join(" OR ");
+    query.outFields = ["*"];
+    query.returnGeometry = false;
+    query.orderByFields = ["raster_date ASC"];
+    query.num = 2000;
+
+    const result = await layer.queryFeatures(query);
+    return (result?.features ?? []).map((f: any) => ({
+      ...(f.attributes || {}),
+    }));
+  })();
+
+  vegetationSeriesByUniqueIdCache.set(cacheKey, request);
+  try {
+    return await request;
+  } catch (err) {
+    vegetationSeriesByUniqueIdCache.delete(cacheKey);
+    throw err;
+  }
 }
 
 const VEG_AVG_FIELDS = [
@@ -137,8 +171,9 @@ export interface VegetationRegionalTimeseriesParams {
   /** Optional vegetation status selected in the VH widget. */
   ndviStatus?: string;
   /**
-   * Subset of VEG_AVG_FIELDS to average. Republic overview should pass
-   * VEG_AVG_FIELDS_CORE to cut ArcGIS outStatistics cost roughly in half.
+   * Subset of VEG_AVG_FIELDS to average. Republic overview should pass only
+   * the selected index columns (often just `ndvi`) and fetch others on demand.
+   * Viloyat/tuman callers omit this to keep the full min/max band set.
    */
   avgFields?: string[];
 }
@@ -1131,7 +1166,6 @@ export async function queryVegetationUniqueIdsForStatus(
   let lastOid = -1;
   let pagesFetched = 0;
   let truncated = false;
-  let expectedCount: number | null = null;
 
   agriVegetationLog("uniqueids-for-status:start", {
     where: baseWhere,
@@ -1141,14 +1175,6 @@ export async function queryVegetationUniqueIdsForStatus(
     district: params.district ?? null,
     oidField,
   });
-
-  try {
-    const countQuery = layer.createQuery();
-    countQuery.where = baseWhere;
-    expectedCount = await layer.queryFeatureCount(countQuery);
-  } catch {
-    expectedCount = null;
-  }
 
   const readOid = (attrs: Record<string, unknown>): number => {
     const raw =
@@ -1212,34 +1238,10 @@ export async function queryVegetationUniqueIdsForStatus(
     if (page === VEG_UNIQUEID_MAX_PAGES - 1) truncated = true;
   }
 
-  if (
-    expectedCount != null &&
-    Number.isFinite(expectedCount) &&
-    ids.size < expectedCount &&
-    truncated
-  ) {
-    // Keep truncated=true; expectedCount confirms we stopped short.
-  } else if (
-    expectedCount != null &&
-    Number.isFinite(expectedCount) &&
-    ids.size < expectedCount &&
-    pagesFetched > 0
-  ) {
-    // Feature count can exceed distinct uniqueids (dup rows). Only warn.
-    agriVegetationLog("uniqueids-for-status:count-gap", {
-      status,
-      date: params.date,
-      uniqueIdCount: ids.size,
-      expectedCount,
-      pagesFetched,
-    });
-  }
-
   agriVegetationLog("uniqueids-for-status:done", {
     status,
     date: params.date,
     count: ids.size,
-    expectedCount,
     pagesFetched,
     truncated,
   });
