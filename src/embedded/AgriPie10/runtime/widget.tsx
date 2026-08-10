@@ -515,7 +515,7 @@ export default class AgriPie extends React.PureComponent<
   ): string {
     const includeCategory = opts.includeCategory !== false;
     const includeViloyat = opts.includeViloyat !== false;
-    // Match Agro_monitoring_X: scope by selected viloyat (not lockedViloyat)
+    // Match Agro_widgetV1: scope by selected viloyat (not lockedViloyat)
     // when includeViloyat is on; layer routing handles region layers.
     const { yil, viloyat, tuman, turi } = this.state;
     const clauses: string[] = [];
@@ -1970,7 +1970,7 @@ export default class AgriPie extends React.PureComponent<
     return `${url}/query`;
   }
   private async _doFetchCategoryData(): Promise<void> {
-    // Match Agro_monitoring_X query key / routing: selected viloyat only
+    // Match Agro_widgetV1 query key / routing: selected viloyat only
     // (lockedViloyat stays in state for UI/access, not in the stats key).
     const selectedViloyat = (this.state.viloyat || "").trim();
     const key = this.makeQueryKey(
