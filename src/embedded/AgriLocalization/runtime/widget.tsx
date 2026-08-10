@@ -637,6 +637,12 @@ export default class AgriLocalization extends React.PureComponent<
    * map paint when a VH status is still active (see applyMapFiltersOptimized).
    */
   private _deferVhUniqueIdResolve = false;
+  /**
+   * While deferred VH uniqueids reload, never fall back to the polygon `vh`
+   * attribute filter (it does not store bar categories like "4-Past" and
+   * blanks the MapImage). Geography + turi stay visible until ids arrive.
+   */
+  private _suppressLegacyVhOnMap = false;
   /** Cache: status|date|region|district|crops → uniqueids */
   private _vhUniqueIdCache: Record<string, string[]> = {};
   /** Last successful VH bar payload — reused on VH-only selection toggles. */
@@ -1707,9 +1713,9 @@ export default class AgriLocalization extends React.PureComponent<
     }
 
     // ✅ When only turi (crop) changes: keep vh so map ANDs crop + status.
-    // VH bar re-scopes by crop (filterVhBarByCrop); Pie stays region crops.
+    // Cache keys already include cropIds — do not wipe the whole cache (that
+    // forced a full uniqueid re-page and made VH+crop feel stuck).
     if (turiChanged) {
-      this._vhUniqueIdCache = {};
       this._vhUniqueIdsReadyForApply = false;
       this._reuseVhBarDataOnNextBroadcast = false;
     }
@@ -1874,9 +1880,23 @@ export default class AgriLocalization extends React.PureComponent<
               return;
             }
 
-            // Map filters by turi text on region-year layers — it does NOT need
-            // vegetation crop_id. Start map immediately so VH bar compute cannot
-            // hold the map surface open. crop_id is resolved only for VH below.
+            // VH + ekin turi: crop_id MUST be ready before map/VH uniqueid
+            // resolve. Otherwise deferred resolve runs with cropIds=[] (or a
+            // stale empty set) and the map can stick on an empty DE.
+            const vhActiveWithCrop =
+              !!String(this.state.vh || "").trim() &&
+              (turiChanged || this.getSelectedTurlar().length > 0);
+            if (vhActiveWithCrop) {
+              await this.ensureCropIdForSelection();
+              if (!isApplyCurrent()) {
+                AgriLocalization.agriLog(
+                  "handleWidgetSelection:SKIP-stale-apply",
+                  { applyId, phase: "after-crop-id-before-map" },
+                );
+                return;
+              }
+            }
+
             if (this._isMounted) {
               this.setState({ loading: false });
             }
@@ -1916,14 +1936,17 @@ export default class AgriLocalization extends React.PureComponent<
               }
             })();
 
-            // VH / vegetation indices need crop_id — resolve after map started.
-            await this.ensureCropIdForSelection();
-            if (!isApplyCurrent()) {
-              AgriLocalization.agriLog(
-                "handleWidgetSelection:SKIP-stale-apply",
-                { applyId, phase: "after-crop-id" },
-              );
-              return;
+            // Non-VH paths still resolve crop_id after map start (map uses
+            // turi text and does not need vegetation crop_id).
+            if (!vhActiveWithCrop) {
+              await this.ensureCropIdForSelection();
+              if (!isApplyCurrent()) {
+                AgriLocalization.agriLog(
+                  "handleWidgetSelection:SKIP-stale-apply",
+                  { applyId, phase: "after-crop-id" },
+                );
+                return;
+              }
             }
 
             this.broadcastFilterState();
@@ -6034,14 +6057,19 @@ export default class AgriLocalization extends React.PureComponent<
   private syncShownRegionYearLayers = (map: any): ShownRegionYearLayer[] => {
     // Strict: null = no VH uniqueid filter; [] = VH active but zero matches (1=0);
     // non-empty = uniqueid IN (...). Never treat [] as null (that showed all polygons).
+    // Deferred first paint: ignore previous uniqueids on the map (turi-only) but
+    // keep them in _vhMapUniqueIds so Region/Pie broadcasts do not go empty.
+    const deferredMapPaint = this._suppressLegacyVhOnMap;
+    const suppressLegacyVh =
+      deferredMapPaint || this._vhMapUniqueIds != null;
     return syncRegionYearLayerVisibility(map, {
       yil: this.state.yil,
       viloyat: this.getEffectiveViloyat(),
       tuman: this.state.tuman,
       turi: this.state.turi,
       turlar: this.getSelectedTurlar(),
-      vh: this._vhMapUniqueIds != null ? "" : this.state.vh,
-      uniqueIds: this._vhMapUniqueIds,
+      vh: suppressLegacyVh ? "" : this.state.vh,
+      uniqueIds: deferredMapPaint ? null : this._vhMapUniqueIds,
     });
   };
   private loadNdviBucketIds = async (vhCategory: string): Promise<void> => {
@@ -6140,12 +6168,15 @@ export default class AgriLocalization extends React.PureComponent<
     // paging; AgriBar clicks never set _deferVhUniqueIdResolve.
     if (this._vhUniqueIdsReadyForApply) {
       this._vhUniqueIdsReadyForApply = false;
+      this._suppressLegacyVhOnMap = false;
     } else if (this._deferVhUniqueIdResolve) {
-      // First paint: geography/crop only. Drop stale uniqueid IN (...) from the
-      // previous crop so the map is not under-filtered while ids reload.
-      // buildWhereClause falls back to the polygon `vh` attribute until then.
-      this._vhMapUniqueIds = null;
+      // First paint: map uses geography + turi only (see syncShownRegionYearLayers).
+      // Keep previous _vhMapUniqueIds for chart broadcast — nulling them made
+      // AgriRegion buildVhScopedWheres return 1=0 ("Ma'lumot topilmadi") until
+      // a rebroadcast that never came. NEVER fall back to polygon `vh`.
+      this._suppressLegacyVhOnMap = true;
     } else {
+      this._suppressLegacyVhOnMap = false;
       await this.resolveVhMapUniqueIds(isCurrent);
       if (isCurrent && !isCurrent()) return;
     }
@@ -6487,14 +6518,29 @@ export default class AgriLocalization extends React.PureComponent<
         void (async () => {
           try {
             await this.resolveVhMapUniqueIds(stillCurrent);
-            if (!stillCurrent()) return;
+            if (!stillCurrent()) {
+              // Do not leave the map stuck on turi-only after a superseded
+              // apply — the newer apply owns the next uniqueid resolve.
+              return;
+            }
+            this._suppressLegacyVhOnMap = false;
             this._vhUniqueIdsReadyForApply = true;
             await this.applyFiltersPersistent(stillCurrent);
+            // Region/Pie/Indicator listen to masterFilterChanged — without
+            // this rebroadcast they keep 1=0 / stale ids after VH→crop.
+            if (stillCurrent()) {
+              this.broadcastFilterState();
+            }
           } catch (error: any) {
             AgriLocalization.agriLog(
               "applyMapFiltersOptimized:deferred-vh-FAILED",
               { error: String(error?.message || error) },
             );
+            // Keep turi-only paint (suppressLegacy) rather than writing legacy vh.
+            if (stillCurrent()) {
+              this._suppressLegacyVhOnMap = true;
+              this.broadcastFilterState();
+            }
           }
         })();
       }
@@ -6510,10 +6556,13 @@ export default class AgriLocalization extends React.PureComponent<
         revealAfterCrop ||
         zoomRequest.reason === "region" ||
         zoomRequest.reason === "year";
-      // Skip crop re-query on VH-only changes: distinct-turi over a huge
-      // `uniqueid IN (...)` WHERE is the main source of lag.
+      // Skip crop re-query while VH uniqueid filter is active (or loading):
+      // distinct-turi over a huge `uniqueid IN (...)` WHERE is very slow and
+      // raced with deferred VH resolve when ekin turi was picked after VH.
+      const vhFilterActive = !!String(this.state.vh || "").trim();
       if (
         !vhOnly &&
+        !vhFilterActive &&
         this.state.cropRendererMode === "on" &&
         (this._lastShownRegionYearLayers || []).length > 0
       ) {

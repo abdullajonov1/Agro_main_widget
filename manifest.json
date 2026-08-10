@@ -1,8 +1,8 @@
 {
-  "name": "Agro_monitoring",
-  "label": "Agro_monitoring",
+  "name": "Agro_widgetV1",
+  "label": "Agro_widgetV1",
   "type": "widget",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "exbVersion": "1.16.0",
   "author": "Custom Developer",
   "description": "Self-contained Space Agro Monitoring dashboard with embedded AgriLocalization, AgriRegion10, AgriIndicator10, AgriPie10, AgriGraff10, AgriBar10, and AgriPopup (no dependency on standalone Agri3 widgets)",

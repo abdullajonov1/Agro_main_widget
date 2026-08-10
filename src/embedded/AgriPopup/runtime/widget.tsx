@@ -468,8 +468,16 @@ export default class AgriPolygon extends React.PureComponent<
   private getDetachedQueryLayer = async (
     layer: any,
   ): Promise<__esri.FeatureLayer | null> => {
-    const url = String(layer?.url || "").trim();
+    const url = String(layer?.url || "").trim().replace(/\/+$/, "");
     if (!url) return null;
+    // Skip MapServer roots (e.g. "Agri 2026 republic data") — FeatureLayer
+    // #load() fails and only floods the console.
+    if (
+      !/\/(?:MapServer|FeatureServer)\/\d+$/i.test(url) &&
+      !/\/FeatureServer$/i.test(url)
+    ) {
+      return null;
+    }
     let detached = this._queryOnlyLayers.get(url);
     if (!detached) {
       detached = new FeatureLayer({ url });
@@ -478,6 +486,7 @@ export default class AgriPolygon extends React.PureComponent<
     try {
       await detached.load();
     } catch {
+      this._queryOnlyLayers.delete(url);
       return null;
     }
     return detached as unknown as __esri.FeatureLayer;

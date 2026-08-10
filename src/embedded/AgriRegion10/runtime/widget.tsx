@@ -17,11 +17,16 @@ import AgriChartLoader from "../../../shared/AgriChartLoader";
 import { agriNoDataLabel } from "../../../shared/agriNoDataLabel";
 import { AgriRegionBarChart } from "./AgriRegionBarChart";
 import { SortAscIcon, SortDescIcon } from "./SortIcons";
-import { getQueryableLayer, withEvapoAccessWhere } from "../../shared/feature-layer-data";
+import {
+  apostropheVariants,
+  getQueryableLayer,
+  withEvapoAccessWhere,
+} from "../../shared/feature-layer-data";
 import {
   buildSpatialJoinWhere,
   getAgriTableDataLayer,
 } from "../../shared/agri-table-data-source";
+import { getPieVhFilterUniqueIds } from "../../shared/agri-chart-filter-order";
 import { translateUzbekPlaceToEnglish, type EnglishPlaceKind } from "../../shared/english-place-names";
 import "./AgriRegion.css";
 
@@ -324,6 +329,8 @@ interface AgriRegionState {
     turlar: string[];
     vh: string;
     vhUniqueids: string[] | null;
+    /** When VH was selected before ekin turi, charts stay VH-scoped. */
+    filterPieByVh: boolean;
   };
 
   // Navigation
@@ -472,6 +479,7 @@ export default class AgriRegion extends React.PureComponent<
         turlar: [],
         vh: "",
         vhUniqueids: null,
+        filterPieByVh: false,
       },
 
       currentView: "viloyat",
@@ -739,6 +747,7 @@ export default class AgriRegion extends React.PureComponent<
       ),
     );
     const nextVh = String(f.vh || "").trim();
+    const nextFilterPieByVh = Boolean(f.filterPieByVh);
     const nextVhUniqueids: string[] | null = nextVh
       ? Array.isArray(d.vhUniqueids)
         ? Array.from(
@@ -758,6 +767,7 @@ export default class AgriRegion extends React.PureComponent<
       turlar: nextTurlar,
       vh: nextVh,
       vhUniqueids: nextVhUniqueids,
+      filterPieByVh: nextFilterPieByVh,
     };
 
     const lockedViloyat = d?.scope?.lockedViloyat
@@ -778,6 +788,7 @@ export default class AgriRegion extends React.PureComponent<
       next.turi !== prev.turi ||
       JSON.stringify(next.turlar) !== JSON.stringify(prev.turlar) ||
       next.vh !== prev.vh ||
+      next.filterPieByVh !== prev.filterPieByVh ||
       JSON.stringify(next.vhUniqueids) !== JSON.stringify(prev.vhUniqueids) ||
       lockedViloyat !== this.state.lockedViloyat ||
       isLocked !== this.state.isLocked;
@@ -825,6 +836,7 @@ export default class AgriRegion extends React.PureComponent<
         next.turi !== prev.turi ||
         JSON.stringify(next.turlar) !== JSON.stringify(prev.turlar) ||
         next.vh !== prev.vh ||
+        next.filterPieByVh !== prev.filterPieByVh ||
         JSON.stringify(next.vhUniqueids) !== JSON.stringify(prev.vhUniqueids) ||
         lockedViloyat !== prevLocked;
       this.setState(
@@ -840,6 +852,7 @@ export default class AgriRegion extends React.PureComponent<
             turlar: next.turlar,
             vh: next.vh,
             vhUniqueids: next.vhUniqueids,
+            filterPieByVh: next.filterPieByVh,
           },
           lockedViloyat,
           isLocked,
@@ -867,6 +880,7 @@ export default class AgriRegion extends React.PureComponent<
           turlar: next.turlar,
           vh: next.vh,
           vhUniqueids: next.vhUniqueids,
+          filterPieByVh: next.filterPieByVh,
         },
         lockedViloyat,
         isLocked,
@@ -1176,20 +1190,45 @@ export default class AgriRegion extends React.PureComponent<
       : currentFilters.turi
         ? [currentFilters.turi]
         : [];
-    const cropClauses = selectedTurlar.map(
-      (value) => `turi='${this.escapeArcGIS(value)}'`,
-    );
+    const cropClauses = selectedTurlar.flatMap((value) => {
+      const variants = apostropheVariants(value);
+      const values = variants.length ? variants : [value];
+      return values.map((v) => `turi='${this.escapeArcGIS(v)}'`);
+    });
     if (cropClauses.length === 1) c.push(cropClauses[0]);
     else if (cropClauses.length > 1) c.push(`(${cropClauses.join(" OR ")})`);
 
     return withEvapoAccessWhere(c.length ? c.join(" AND ") : "1=1");
   }
 
+  /**
+   * Resolve uniqueids for Region aggregates when VH is active.
+   * - null → still loading (do not query as 1=0)
+   * - [] → confirmed empty
+   * - When VH was selected before ekin turi, prefer Pie bridge ids (VH-wide)
+   *   so a crop-scoped empty map list does not blank "Tumanlar kesimida".
+   */
+  private resolveVhUniqueidsForQuery = (): string[] | null => {
+    const { vh, vhUniqueids, filterPieByVh } = this.state.currentFilters;
+    if (!vh) return null;
+    if (Array.isArray(vhUniqueids) && vhUniqueids.length > 0) {
+      return vhUniqueids;
+    }
+    if (filterPieByVh) {
+      const pieIds = getPieVhFilterUniqueIds();
+      if (Array.isArray(pieIds) && pieIds.length > 0) return pieIds;
+    }
+    // null = pending resolve; [] = Localization confirmed zero matches
+    return Array.isArray(vhUniqueids) ? vhUniqueids : null;
+  };
+
   private buildVhScopedWheres = (baseWhere: string): string[] => {
-    const { vh, vhUniqueids } = this.state.currentFilters;
+    const { vh } = this.state.currentFilters;
     if (!vh) return [baseWhere];
-    // Fail closed until Localization publishes the completed ID list.
-    if (!Array.isArray(vhUniqueids) || !vhUniqueids.length) return ["1=0"];
+    const vhUniqueids = this.resolveVhUniqueidsForQuery();
+    // Pending — caller should keep loader, not wipe bars with 1=0.
+    if (vhUniqueids === null) return [];
+    if (!vhUniqueids.length) return ["1=0"];
 
     const chunks: string[] = [];
     const chunkSize = 600;
@@ -1312,6 +1351,17 @@ export default class AgriRegion extends React.PureComponent<
         effectiveView,
         effectiveViloyat,
       );
+      // VH active but uniqueids not published yet — keep spinner, do not
+      // flash "Ma'lumot topilmadi" (that was the VH → ekin turi race).
+      if (
+        currentFilters.vh &&
+        this.resolveVhUniqueidsForQuery() === null
+      ) {
+        if (isCurrent()) {
+          this.setState({ regionalLoading: true, regionalError: null });
+        }
+        return;
+      }
       const rows = await this.queryAggregates(groupField, where);
       if (!isCurrent()) return;
 

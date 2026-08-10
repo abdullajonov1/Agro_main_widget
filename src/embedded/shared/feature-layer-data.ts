@@ -375,8 +375,17 @@ export function isMapImageOwnedLayer(layer: any): boolean {
 const detachedQueryLayerCache = new Map<string, any>();
 
 export async function getDetachedQueryLayerForUrl(url: string): Promise<any | null> {
-  const cleanUrl = String(url || "").trim();
+  const cleanUrl = String(url || "").trim().replace(/\/+$/, "");
   if (!cleanUrl) return null;
+  // FeatureLayer requires a layer endpoint (.../MapServer/0 or FeatureServer/N).
+  // MapServer roots (e.g. "Agri 2026 republic data") fail #load() and only
+  // spam the console — skip them instead of constructing a doomed client.
+  if (
+    !/\/(?:MapServer|FeatureServer)\/\d+$/i.test(cleanUrl) &&
+    !/\/FeatureServer$/i.test(cleanUrl)
+  ) {
+    return null;
+  }
   let layer = detachedQueryLayerCache.get(cleanUrl);
   if (!layer) {
     try {
@@ -392,6 +401,7 @@ export async function getDetachedQueryLayerForUrl(url: string): Promise<any | nu
   try {
     await layer.load();
   } catch {
+    detachedQueryLayerCache.delete(cleanUrl);
     return null;
   }
   return layer;
@@ -548,27 +558,6 @@ function buildSublayerDefinitionExpression(
     }
   }
 
-  const selectedTurlar = (Array.isArray(turi) ? turi : [turi])
-    .map((value) => String(value ?? "").trim())
-    .filter(Boolean);
-  if (selectedTurlar.length) {
-    const turiField = findField("turi");
-    const turiFieldName = turiField?.name || (fields.length ? null : "turi");
-    if (turiFieldName) {
-      // Match Localization eqAposSmart — Bug'doy / Bug’doy etc. on MapImage.
-      const cropClauses = selectedTurlar.flatMap((value) => {
-        const variants = apostropheVariants(value);
-        const values = variants.length ? variants : [value];
-        return values.map((v) => `${turiFieldName}='${escapeArcGIS(v)}'`);
-      });
-      clauses.push(
-        cropClauses.length === 1
-          ? cropClauses[0]
-          : `(${cropClauses.join(" OR ")})`,
-      );
-    }
-  }
-
   // Prefer uniqueid IN (...) from vegetation ndvi_status (bar chart source).
   // Chunk large lists — a single 2k–10k UUID IN blows MapImage export URLs
   // and makes the filter feel stuck even when the expression is correct.
@@ -589,9 +578,36 @@ function buildSublayerDefinitionExpression(
       clauses.push(
         chunks.length === 1 ? chunks[0] : `(${chunks.join(" OR ")})`,
       );
+      // Ids from vegetation are already crop-scoped when turi is selected —
+      // ANDing MapImage `turi` text again can wipe a valid uniqueid set on
+      // apostrophe/spelling mismatch. Skip turi when uniqueids are present.
     }
   } else {
+    // No uniqueid filter yet (turi-only, or deferred VH first paint).
+    const selectedTurlar = (Array.isArray(turi) ? turi : [turi])
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean);
+    if (selectedTurlar.length) {
+      const turiField = findField("turi");
+      const turiFieldName = turiField?.name || (fields.length ? null : "turi");
+      if (turiFieldName) {
+        // Match Localization eqAposSmart — Bug'doy / Bug’doy etc. on MapImage.
+        const cropClauses = selectedTurlar.flatMap((value) => {
+          const variants = apostropheVariants(value);
+          const values = variants.length ? variants : [value];
+          return values.map((v) => `${turiFieldName}='${escapeArcGIS(v)}'`);
+        });
+        clauses.push(
+          cropClauses.length === 1
+            ? cropClauses[0]
+            : `(${cropClauses.join(" OR ")})`,
+        );
+      }
+    }
+
     // Legacy fallback: attribute `vh` with category label OR ndvi_status token.
+    // Callers must pass vh="" when using vegetation uniqueids / deferred paint
+    // — polygon `vh` does not store bar categories like "4-Past".
     const trimmedVh = String(vh ?? "").trim();
     if (trimmedVh) {
       const vhField = findField("vh");

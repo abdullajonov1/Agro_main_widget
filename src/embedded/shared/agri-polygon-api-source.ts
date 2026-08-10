@@ -13,11 +13,11 @@ import { addDecoder, fromArrayBuffer } from "geotiff";
 // geotiff's package.json only exports "." — deep "geotiff/dist-module/..."
 // imports fail under webpack 5. Relative node_modules paths bypass exports
 // and keep deflate/pako in the widget bundle (Portal ZIP has no /widgets/chunks).
-// Path is shared/ → … → client/ (8 levels) then node_modules/geotiff/...
-import RawDecoder from "../../../../../../../../node_modules/geotiff/dist-module/compression/raw.js";
-import LzwDecoder from "../../../../../../../../node_modules/geotiff/dist-module/compression/lzw.js";
-import DeflateDecoder from "../../../../../../../../node_modules/geotiff/dist-module/compression/deflate.js";
-import PackbitsDecoder from "../../../../../../../../node_modules/geotiff/dist-module/compression/packbits.js";
+// Path is shared/ → … → client/ (7 levels) then node_modules/geotiff/...
+import RawDecoder from "../../../../../../../node_modules/geotiff/dist-module/compression/raw.js";
+import LzwDecoder from "../../../../../../../node_modules/geotiff/dist-module/compression/lzw.js";
+import DeflateDecoder from "../../../../../../../node_modules/geotiff/dist-module/compression/deflate.js";
+import PackbitsDecoder from "../../../../../../../node_modules/geotiff/dist-module/compression/packbits.js";
 
 addDecoder([undefined, 1], async () => RawDecoder as any, undefined, false);
 addDecoder(5, async () => LzwDecoder as any, undefined, false);
