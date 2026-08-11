@@ -295,7 +295,7 @@ export default class AgriIndicatorUnusedLand extends React.PureComponent<
     if (!layer || connectionStatus !== "connected") return;
 
       if (!yil) {
-      this.setState({ value: null, loading: false, error: null });
+      this.setState({ value: null, loading: true, error: null });
       return;
     }
 
@@ -369,8 +369,10 @@ export default class AgriIndicatorUnusedLand extends React.PureComponent<
     const unit = language === "en" ? "ha" : language === "uz_lat" ? "ga" : "га";
 
     const themeClass = isDarkTheme ? "dark-theme" : "light-theme";
-    // Soft refresh: spinner only before the first successful paint.
-    const showBlockingLoader = loading && value == null && !error;
+    const showBlockingLoader =
+      !error &&
+      value == null &&
+      (loading || !(this.state.yil || "").trim());
     const connectionFailed =
       this.state.connectionStatus === "failed" && !!error && value == null;
 

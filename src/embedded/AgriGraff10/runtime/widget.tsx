@@ -7750,12 +7750,15 @@ export default class AgriGraffWidget extends React.PureComponent<
 
     const rawMinValue = Math.min(...values, ...allMins);
     const rawMaxValue = Math.max(...values, ...allMaxs);
-    const valuePadding = Math.max((rawMaxValue - rawMinValue) * 0.08, 0.02);
-    const minValue = rawMinValue - valuePadding;
-    const maxValue = rawMaxValue + valuePadding;
-    const isNdviScale = primaryIndex === "ndvi";
-    const axisMinValue = isNdviScale ? rawMinValue : minValue;
-    const axisMaxValue = isNdviScale ? rawMaxValue : maxValue;
+    // Y scale always starts at 0 when data is non-negative so the line is
+    // read against a fixed floor (not auto-zoomed to the series min).
+    // Only dip below 0 when the series itself has negative values (e.g. NDWI).
+    const topPadding = Math.max(rawMaxValue * 0.06, 0.02);
+    const axisMinValue =
+      rawMinValue < 0
+        ? rawMinValue - Math.max(Math.abs(rawMinValue) * 0.06, 0.02)
+        : 0;
+    const axisMaxValue = Math.max(rawMaxValue + topPadding, axisMinValue + 0.01);
     const axisRange = Math.max(axisMaxValue - axisMinValue, 0.001);
 
     // Scale functions
@@ -7799,7 +7802,15 @@ export default class AgriGraffWidget extends React.PureComponent<
       );
     };
 
-    const yAxisTickValues = [1, 0.5, 0, -0.5, -1];
+    // Tick labels follow the live 0→max (or min→max) domain — not a fixed -1…1 grid.
+    const yAxisTickValues = (() => {
+      const steps = 4;
+      const ticks: number[] = [];
+      for (let i = 0; i <= steps; i++) {
+        ticks.push(axisMinValue + (axisRange * i) / steps);
+      }
+      return ticks;
+    })();
 
     // Persistent guide for the chart-selected date (survives mouse leave).
     const selectionGuide = (() => {

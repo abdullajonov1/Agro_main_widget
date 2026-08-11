@@ -339,7 +339,7 @@ export default class AgriIndicatorYield extends React.PureComponent<
     if (!layer || connectionStatus !== "connected") return;
 
     if (!yil) {
-      this.setState({ value: null, loading: false, error: null });
+      this.setState({ value: null, loading: true, error: null });
       return;
     }
 
@@ -415,7 +415,11 @@ export default class AgriIndicatorYield extends React.PureComponent<
           : "Ўртача ҳосилдорлик";
 
     const themeClass = isDarkTheme ? "dark-theme" : "light-theme";
-    const showBlockingLoader = loading && value == null && !error;
+    // Continuous spinner until first value; avoid "-" gap while year settles.
+    const showBlockingLoader =
+      !error &&
+      value == null &&
+      (loading || !(this.state.yil || "").trim());
     const connectionFailed =
       this.state.connectionStatus === "failed" && !!error && value == null;
 

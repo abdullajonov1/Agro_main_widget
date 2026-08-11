@@ -1974,26 +1974,14 @@ export default class AgriRegion extends React.PureComponent<
 
     const unitLabel = language === "en" ? "ha" : language === "uz_lat" ? "ga" : "га";
 
+    // Scale bars to the largest row: max maydon = 100% of the track.
+    // (Previously axis was inflated for value-label reserve, leaving a large
+    // empty gap after the top district.)
     const maxMaydon = chartData.reduce(
       (max, item) => Math.max(max, Number(item.maydon) || 0),
       0,
     );
-    const longestValueLabelChars = chartData.reduce((max, item) => {
-      const label = `${this.formatNumber(item.maydon)} ${unitLabel}`;
-      return Math.max(max, label.length);
-    }, 0);
-    const plotWidthEstimate = Math.max(
-      160,
-      (this.state.containerWidth || 400) - yAxisWidth - chartTrackRightInset,
-    );
-    const valueLabelReserveRatio = Math.min(
-      0.34,
-      (longestValueLabelChars * 6.8 + 18) / plotWidthEstimate,
-    );
-    const chartAxisMax =
-      maxMaydon > 0
-        ? maxMaydon / Math.max(0.64, 1 - valueLabelReserveRatio)
-        : 1;
+    const chartAxisMax = maxMaydon > 0 ? maxMaydon : 1;
 
     const chartViewKey = `${currentView}:${selectedViloyatForDrillDown ?? ""}:${sortMode}:${effectiveDisplayCount}`;
 

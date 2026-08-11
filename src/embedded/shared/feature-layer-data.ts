@@ -948,6 +948,10 @@ export function syncRegionYearLayerVisibility(
     matchesRegion: boolean;
     visible: boolean;
   }> = [];
+  // Prepare DE / parents first, then flip visibility. Starting the MapImage
+  // export only after definitionExpression is set avoids a wasted first
+  // export against the service default (often "1=0" or unfiltered).
+  const pendingShow: any[] = [];
 
   for (const layer of regionYearLeaves) {
     const haystack = `${String(layer?.title || "")} ${String(layer?.url || "")}`;
@@ -958,7 +962,6 @@ export function syncRegionYearLayerVisibility(
     const shouldShow = matchesYear && matchesRegion;
 
     try {
-      layer.visible = shouldShow;
       if (shouldShow) {
         // Keep opacity at 1. The old opacity-0 → crop → opacity-1 dance left
         // MapImage sublayers / FeatureLayers permanently invisible when the
@@ -997,6 +1000,9 @@ export function syncRegionYearLayerVisibility(
 
         const liveSublayers = collectLiveSublayers(layer);
         shown.push({ layer, sublayers: liveSublayers });
+        pendingShow.push(layer);
+      } else {
+        layer.visible = false;
       }
     } catch {
       /* some layer types may not support direct visibility assignment */
@@ -1009,6 +1015,14 @@ export function syncRegionYearLayerVisibility(
     });
   }
 
+  for (const layer of pendingShow) {
+    try {
+      layer.visible = true;
+    } catch {
+      /* ignore */
+    }
+  }
+
   if (!candidates.length && viloyat) {
     // Local-only diagnostic — no network. Helps confirm title mismatch.
     try {
@@ -1019,7 +1033,7 @@ export function syncRegionYearLayerVisibility(
       ).map((l: any) => `${l?.type || "?"}:${l?.title || l?.id || "?"}`);
       // eslint-disable-next-line no-console
       console.warn(
-        "[Agro_widgetV2] No region-year field layers matched selection",
+        "[Agro_widgetV3] No region-year field layers matched selection",
         { yil, viloyat, mapLayerTitles: titles },
       );
     } catch {
@@ -1048,7 +1062,7 @@ function getRegionYearOpacityTarget(layer: any): any {
  * Collect only per-region field leaves (never the republic aggregate container).
  * Safe: does not toggle visibility and does not request exports.
  */
-function collectRegionYearLeafLayers(map: any): any[] {
+export function collectRegionYearLeafLayers(map: any): any[] {
   const out: any[] = [];
   const seen = new Set<any>();
 
@@ -1090,6 +1104,46 @@ function collectRegionYearLeafLayers(map: any): any[] {
   const roots = map.layers?.toArray?.() || map.allLayers?.toArray?.() || [];
   for (const layer of roots) consider(layer);
   return out;
+}
+
+/**
+ * Load MapImage metadata for region-year leaves (current year, optional viloyat)
+ * without toggling visibility. Speeds the first export when the user later
+ * reveals that region — cold `load()` no longer shares the critical path
+ * with the heavy `export` request.
+ */
+export async function preloadRegionYearMapImages(
+  map: any,
+  yil: string,
+  viloyat?: string,
+): Promise<number> {
+  if (!map) return 0;
+  const year = String(yil || "").trim();
+  if (!year) return 0;
+  const region = String(viloyat || "").trim();
+  const leaves = collectRegionYearLeafLayers(map);
+  const parents = new Set<any>();
+  for (const layer of leaves) {
+    const haystack = `${String(layer?.title || "")} ${String(layer?.url || "")}`;
+    if (!haystackMatchesYear(haystack, year)) continue;
+    if (region && !haystackMatchesRegion(haystack, region)) continue;
+    const parent = getMapImageParentLayer(layer) || layer;
+    if (parent) parents.add(parent);
+  }
+  let loaded = 0;
+  await Promise.all(
+    Array.from(parents).map(async (layer) => {
+      try {
+        if (typeof layer?.load === "function" && !layer.loaded) {
+          await layer.load();
+          loaded += 1;
+        }
+      } catch {
+        /* best-effort */
+      }
+    }),
+  );
+  return loaded;
 }
 
 /** Collect every queryable field layer on the map (feature + map-image sublayers). */

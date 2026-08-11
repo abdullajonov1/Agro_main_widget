@@ -26,6 +26,7 @@ import {
   getDetachedQueryLayerFor,
   getQueryableLayer,
   isMapImageOwnedLayer,
+  preloadRegionYearMapImages,
   syncRegionYearLayerVisibility,
   withEvapoAccessWhere,
   type ShownRegionYearLayer,
@@ -1079,6 +1080,66 @@ export default class AgriLocalization extends React.PureComponent<
   };
 
   /**
+   * Paint a best-effort crop palette on shown layers WITHOUT refresh.
+   * Lets the first MapImage export (from visibility) already use crop colors
+   * instead of waiting for distinct-turi query + a second export.
+   */
+  private applyInstantCropPaletteNoRefresh = (): void => {
+    if (this.state.cropRendererMode !== "on") return;
+    if (String(this.state.vh || "").trim()) return;
+    const layers = this.getCropRendererTargetLayers();
+    if (!layers.length) return;
+
+    const seenLabels = new Set<string>();
+    const uniqueValueInfos = CROP_RENDERER_ITEMS.filter((item) => {
+      const label = String(item.label || item.value || "").trim();
+      if (!label || seenLabels.has(label)) return false;
+      seenLabels.add(label);
+      return true;
+    }).map((item) => ({
+      value: item.label || item.value,
+      label: item.label || item.value,
+      symbol: createCropFillSymbol(item.color),
+    }));
+    if (!uniqueValueInfos.length) return;
+
+    for (const layer of layers) {
+      try {
+        const field =
+          this.findLayerFieldName(layer, "turi") ||
+          this.findLayerFieldName(layer, "crop") ||
+          "turi";
+        if (!this._originalLayerRenderers.has(layer)) {
+          this._originalLayerRenderers.set(layer, layer.renderer ?? null);
+        }
+        layer.renderer = {
+          type: "unique-value",
+          field,
+          defaultSymbol: createCropFillSymbol("#78909C"),
+          uniqueValueInfos,
+        } as unknown as __esri.Renderer;
+        this._cropRenderedLayers.add(layer);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  /** Background-warm every region MapImage for the active year. */
+  private warmYearRegionMapImages = (): void => {
+    const map = this.state.activeMapView?.view?.map;
+    const yil = String(this.state.yil || "").trim();
+    if (!map || !yil) return;
+    void preloadRegionYearMapImages(map, yil).then((count) => {
+      if (!count) return;
+      AgriLocalization.agriLog("map:warm-year-region-layers", {
+        yil,
+        loaded: count,
+      });
+    });
+  };
+
+  /**
    * Hide / show the just-revealed region-year MapImage layer(s) while the
    * crop UniqueValueRenderer is still loading.
    */
@@ -1883,13 +1944,24 @@ export default class AgriLocalization extends React.PureComponent<
             this._reuseVhBarDataOnNextBroadcast = false;
             this.broadcastFilterState({ pendingOnly: true });
 
-            await this.ensureRegionDistrictForSelection();
-            if (!isApplyCurrent()) {
-              AgriLocalization.agriLog(
-                "handleWidgetSelection:SKIP-stale-apply",
-                { applyId, phase: "after-region-district" },
-              );
-              return;
+            // First viloyat open: region-year MapImage matching uses the
+            // viloyat *name*, and admin borders have a name→parent_cod map.
+            // Do not block layer reveal on Agri_table region-code lookup.
+            const geographyRevealWithoutCodes =
+              (viloyatChanged || yearChanged) &&
+              !tumanChanged &&
+              !turiChanged &&
+              !String(this.state.vh || "").trim();
+            const ensureRegionPromise = this.ensureRegionDistrictForSelection();
+            if (!geographyRevealWithoutCodes) {
+              await ensureRegionPromise;
+              if (!isApplyCurrent()) {
+                AgriLocalization.agriLog(
+                  "handleWidgetSelection:SKIP-stale-apply",
+                  { applyId, phase: "after-region-district" },
+                );
+                return;
+              }
             }
 
             // VH + ekin turi: crop_id MUST be ready before map/VH uniqueid
@@ -1914,6 +1986,14 @@ export default class AgriLocalization extends React.PureComponent<
             }
             void (async () => {
               try {
+                // Let region-code lookup finish (or race) before zoom so
+                // admin boundaries can prefer numeric parent_cod when ready.
+                if (geographyRevealWithoutCodes) {
+                  await Promise.race([
+                    ensureRegionPromise,
+                    new Promise<void>((resolve) => setTimeout(resolve, 120)),
+                  ]);
+                }
                 await this.applyMapFiltersOptimized(zoomRequest, isApplyCurrent);
                 if (!isApplyCurrent()) {
                   AgriLocalization.agriLog(
@@ -1921,6 +2001,10 @@ export default class AgriLocalization extends React.PureComponent<
                     { applyId, phase: "after-map-filters" },
                   );
                   return;
+                }
+                if (geographyRevealWithoutCodes) {
+                  await ensureRegionPromise;
+                  if (!isApplyCurrent()) return;
                 }
                 await this.fetchDataWithCurrentState();
                 if (!isApplyCurrent()) {
@@ -3267,6 +3351,9 @@ export default class AgriLocalization extends React.PureComponent<
       ]);
       if (!this._isMounted) return;
       await this.applyMapFiltersOptimized();
+      // Warm all region MapImages for the default year so the first viloyat
+      // click does not pay cold layer.load() latency.
+      this.warmYearRegionMapImages();
       await this.fetchDataWithCurrentState();
       if (!this._isMounted) return;
 
@@ -3753,6 +3840,7 @@ export default class AgriLocalization extends React.PureComponent<
         }
         try {
           await this.applyMapFiltersOptimized({ mode: "home", reason: "year" });
+          this.warmYearRegionMapImages();
           await this.fetchDataWithCurrentState();
           this.broadcastFilterState();
         } catch (e: any) {
@@ -3822,6 +3910,7 @@ export default class AgriLocalization extends React.PureComponent<
       async () => {
         try {
           await this.applyMapFiltersOptimized({ mode: "home", reason: "year" });
+          this.warmYearRegionMapImages();
           await this.fetchDataWithCurrentState();
           this.broadcastFilterState();
         } catch (e: any) {
@@ -6586,7 +6675,19 @@ export default class AgriLocalization extends React.PureComponent<
       try {
         const map = this.state.activeMapView?.view?.map;
         if (map) {
+          const effectiveViloyat = this.getEffectiveViloyat();
+          if (this.state.yil && effectiveViloyat) {
+            // Finish MapImage metadata load before the first export starts.
+            await preloadRegionYearMapImages(
+              map,
+              this.state.yil,
+              effectiveViloyat,
+            );
+            if (isCurrent && !isCurrent()) return;
+          }
           this._lastShownRegionYearLayers = this.syncShownRegionYearLayers(map);
+          // Color the in-flight first export when possible (no refresh).
+          this.applyInstantCropPaletteNoRefresh();
         }
       } catch {
         /* best-effort; attribute-level data queries are unaffected */
@@ -6836,14 +6937,20 @@ export default class AgriLocalization extends React.PureComponent<
     if (coverMap) {
       loadingToken = ++this._mapSurfaceLoadingToken;
       this.setMapSurfaceLoading(true, coverReason);
-      // Wait for the dashboard overlay to paint before toggling layers.
+      // One frame is enough for the overlay to paint; double-rAF added
+      // ~32ms of pure wait before every region/year reveal.
       await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        requestAnimationFrame(() => resolve());
       });
     }
 
     const prevExpr = this._prevDefinitionExpression;
     let revealAfterCrop = false;
+    // First viloyat/year reveal: do NOT block zoom/overlay on crop distinct
+    // query + forced MapImage redraw (often 1–3s). Layer visibility already
+    // starts the export; crop colors catch up in the background.
+    const deferCropForFastReveal =
+      zoomRequest.reason === "region" || zoomRequest.reason === "year";
     // Preserve a defer requested by VH-only cold+narrow click; otherwise
     // defer only for crop/tuman refreshes while a VH status stays active.
     const deferVhIds =
@@ -6907,12 +7014,31 @@ export default class AgriLocalization extends React.PureComponent<
       // distinct-turi over a huge `uniqueid IN (...)` WHERE is very slow and
       // raced with deferred VH resolve when ekin turi was picked after VH.
       const vhFilterActive = !!String(this.state.vh || "").trim();
-      if (
+      const shouldSyncCrop =
         !vhOnly &&
         !vhFilterActive &&
         this.state.cropRendererMode === "on" &&
-        (this._lastShownRegionYearLayers || []).length > 0
-      ) {
+        (this._lastShownRegionYearLayers || []).length > 0;
+      if (shouldSyncCrop && deferCropForFastReveal) {
+        AgriLocalization.agriLog("applyMapFiltersOptimized:defer-crop", {
+          reason: zoomRequest.reason,
+        });
+        // CRITICAL: do NOT refresh/crop while the first visibility export is
+        // in flight — that aborts the MapImage request and fields stay blank
+        // until a second export finishes. Wait for the first paint, then colorize.
+        void (async () => {
+          try {
+            await this.waitForShownRegionYearRedraw(false);
+            if (!stillCurrent()) return;
+            await this.syncCropRenderer();
+          } catch (error: any) {
+            AgriLocalization.agriLog(
+              "applyMapFiltersOptimized:deferred-crop-FAILED",
+              { error: String(error?.message || error) },
+            );
+          }
+        })();
+      } else if (shouldSyncCrop) {
         await this.syncCropRenderer();
         if (!stillCurrent()) return;
         if (awaitRedrawAfterCrop) await this.waitForShownRegionYearRedraw();
@@ -6927,7 +7053,7 @@ export default class AgriLocalization extends React.PureComponent<
         // One more paint under the spinner so the colored export is on screen
         // before the overlay lifts (avoids a green flash at dismiss).
         await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          requestAnimationFrame(() => resolve());
         });
       }
     } finally {
@@ -7269,11 +7395,18 @@ export default class AgriLocalization extends React.PureComponent<
                 zoomRequest.reason === "ndvi"
               ? 1.12
               : 1.18;
+        // Region/year first open: snappier camera so fields feel interactive
+        // sooner; crop/district keep the longer ease.
+        const goToMs =
+          zoomRequest.reason === "region" || zoomRequest.reason === "year"
+            ? 450
+            : 700;
         AgriLocalization.agriLog("zoom:goTo", {
           reason: zoomRequest.reason,
           expandFactor,
+          goToMs,
         });
-        await navigate(mergedExtent!.expand(expandFactor), 700);
+        await navigate(mergedExtent!.expand(expandFactor), goToMs);
       } else if (!this.getEffectiveViloyat() && !isStale()) {
         const home = this._homeExtent || (view.map as any)?.fullExtent;
         if (!isEmptyExtent(home)) {

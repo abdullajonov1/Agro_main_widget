@@ -37,7 +37,11 @@ type AgriAnimatedCountProps = {
   /** Target value; null/undefined shows emptyFallback. Always animated as whole integers. */
   value: number | null | undefined;
   durationMs?: number;
-  /** Animate from this integer on first paint (default 0 when value is finite). */
+  /**
+   * Optional start value for the *first* finite paint only.
+   * Default: undefined → show the full target immediately (no 0→N flash).
+   * Later updates still animate from the previous displayed value.
+   */
   animateFromOnMount?: number;
   emptyFallback?: string;
   format?: (n: number) => string;
@@ -54,8 +58,8 @@ export default function AgriAnimatedCount(
   const {
     value,
     durationMs = 700,
-    animateFromOnMount = 0,
-    emptyFallback = "0",
+    animateFromOnMount,
+    emptyFallback = "-",
     format = formatAgriInteger,
     className,
   } = props;
@@ -87,13 +91,16 @@ export default function AgriAnimatedCount(
       return;
     }
 
+    // First finite value: show the full number (unless caller opts into a
+    // mount start). Never default to 0→N — that made indicators flash "0 ga".
+    const isFirstFinite = prevValueRef.current == null;
     const shouldAnimateFromMount =
-      !mountedRef.current && typeof animateFromOnMount === "number";
+      isFirstFinite && typeof animateFromOnMount === "number";
     const from = shouldAnimateFromMount
       ? Math.round(animateFromOnMount)
-      : prevValueRef.current == null
-        ? Math.round(animateFromOnMount)
-        : prevValueRef.current;
+      : isFirstFinite
+        ? to
+        : (prevValueRef.current as number);
 
     mountedRef.current = true;
 

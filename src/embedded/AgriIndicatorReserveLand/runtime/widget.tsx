@@ -417,7 +417,7 @@ export default class AgriIndicatorReserveLand extends React.PureComponent<
 
     // Match Yield/Unused — never query the full table with an empty year.
     if (!String(yil || "").match(/\b(18|19|20)\d{2}\b/)) {
-      this.setState({ value: null, loading: false, error: null });
+      this.setState({ value: null, loading: true, error: null });
       return;
     }
 
@@ -502,7 +502,11 @@ export default class AgriIndicatorReserveLand extends React.PureComponent<
     const unit = language === "en" ? "ha" : language === "uz_lat" ? "ga" : "га";
 
     const themeClass = isDarkTheme ? "dark-theme" : "light-theme";
-    const showBlockingLoader = loading && value == null && !error;
+    const showBlockingLoader =
+      !error &&
+      value == null &&
+      (loading ||
+        !String(this.state.yil || "").match(/\b(18|19|20)\d{2}\b/));
     const connectionFailed =
       this.state.connectionStatus === "failed" && !!error && value == null;
 

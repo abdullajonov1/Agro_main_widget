@@ -1138,8 +1138,10 @@ export default class VegetationStatsWidget extends React.PureComponent<
   refreshData = () => {
     if (this.props.config?.useApiDataSource) {
       if (!this.shouldFetchForViloyat()) {
+        // Keep the spinner until Localization publishes a year — do not
+        // flash "-" / empty between map-connect and the first aggregate.
         this.setState({
-          loading: false,
+          loading: true,
           error: null,
           vegetationArea: null,
           totalArea: null,
@@ -1152,7 +1154,7 @@ export default class VegetationStatsWidget extends React.PureComponent<
       if (this.state.connectionStatus === "connected") {
         if (!this.shouldFetchForViloyat()) {
           this.setState({
-            loading: false,
+            loading: true,
             error: null,
             vegetationArea: null,
             totalArea: null,
@@ -1236,7 +1238,7 @@ export default class VegetationStatsWidget extends React.PureComponent<
     if (config?.useApiDataSource) {
       if (!this.shouldFetchForViloyat()) {
         this.setState({
-          loading: false,
+          loading: true,
           error: null,
           vegetationArea: null,
           totalArea: null,
@@ -1248,7 +1250,7 @@ export default class VegetationStatsWidget extends React.PureComponent<
     } else if (dataSource && connectionStatus === "connected") {
       if (!this.shouldFetchForViloyat()) {
         this.setState({
-          loading: false,
+          loading: true,
           error: null,
           vegetationArea: null,
           totalArea: null,
@@ -1416,7 +1418,7 @@ export default class VegetationStatsWidget extends React.PureComponent<
         if (this.shouldFetchForViloyat()) this.fetchData();
         else {
           this.setState({
-            loading: false,
+            loading: true,
             error: null,
             vegetationArea: null,
             totalArea: null,
@@ -1441,7 +1443,7 @@ export default class VegetationStatsWidget extends React.PureComponent<
           if (this.shouldFetchForViloyat()) this.fetchData();
           else
             this.setState({
-              loading: false,
+              loading: true,
               error: null,
               vegetationArea: null,
               totalArea: null,
@@ -1866,7 +1868,7 @@ export default class VegetationStatsWidget extends React.PureComponent<
     if (!this._isMounted) return;
     if (!this.shouldFetchForViloyat()) {
       this.setState({
-        loading: false,
+        loading: true,
         error: null,
         vegetationArea: null,
         totalArea: null,
@@ -2031,9 +2033,9 @@ export default class VegetationStatsWidget extends React.PureComponent<
     if (this.props.config?.useApiDataSource) return this.fetchApiData();
 
     if (!this.shouldFetchForViloyat()) {
-      // Keep it blank when viloyat isn't chosen (also covers groupBy mode).
+      // Year not published yet — stay in loading, never paint "0"/"-".
       this.setState({
-        loading: false,
+        loading: true,
         error: null,
         vegetationArea: null,
         totalArea: null,
@@ -2486,10 +2488,14 @@ export default class VegetationStatsWidget extends React.PureComponent<
     // The indicator now renders its aggregate value for the whole country when only yil is set.
 
     const mapOverlayMode = !!(config as any)?.mapOverlayMode;
+    // One continuous spinner until the first aggregate arrives. Do not drop
+    // the loader while waiting for year/connect (that caused spinner → "-" →
+    // spinner → value). Soft refreshes keep the previous number visible.
+    const waitingForYear = !(selectedYil || "").trim();
     const showBlockingLoader =
-      (isInitializing || loading) &&
+      !error &&
       vegetationArea == null &&
-      !error;
+      (isInitializing || loading || waitingForYear);
 
     return (
       <div
@@ -2559,7 +2565,10 @@ export default class VegetationStatsWidget extends React.PureComponent<
                     : undefined
                 }
               >
-                <AgriAnimatedCount value={vegetationArea} />
+                <AgriAnimatedCount
+                  value={vegetationArea}
+                  emptyFallback="-"
+                />
                 {effectiveUnit && <span className="unit">{effectiveUnit}</span>}
               </div>
 
