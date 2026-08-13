@@ -1125,15 +1125,22 @@ export default class AgriLocalization extends React.PureComponent<
     }
   };
 
-  /** Background-warm every region MapImage for the active year. */
+  /** Background-warm the selected region's MapImage for the active year. */
   private warmYearRegionMapImages = (): void => {
     const map = this.state.activeMapView?.view?.map;
     const yil = String(this.state.yil || "").trim();
     if (!map || !yil) return;
-    void preloadRegionYearMapImages(map, yil).then((count) => {
+    // Only warm the region actually in view — warming every viloyat here
+    // used to fire a load() at every region+year MapImage service
+    // (including ones deleted/renamed on the server) on every mount/year
+    // change, even before the user picked a region.
+    const viloyat = this.getEffectiveViloyat();
+    if (!viloyat) return;
+    void preloadRegionYearMapImages(map, yil, viloyat).then((count) => {
       if (!count) return;
       AgriLocalization.agriLog("map:warm-year-region-layers", {
         yil,
+        viloyat,
         loaded: count,
       });
     });
@@ -6646,14 +6653,24 @@ export default class AgriLocalization extends React.PureComponent<
       // other district and races the first field click / popup.
       if (spatialMapLayers?.length && primaryWhere != null) {
         try {
-          const spatialWhere =
-            primaryWhere === "" || primaryWhere === "1=1"
-              ? "1=1"
-              : primaryWhere === "1=0"
-                ? "1=0"
-                : buildSpatialJoinWhere(
-                    await queryAgriUniqueIdsForWhere(primaryWhere),
-                  );
+          let spatialWhere: string;
+          if (primaryWhere === "" || primaryWhere === "1=1") {
+            spatialWhere = "1=1";
+          } else if (primaryWhere === "1=0") {
+            spatialWhere = "1=0";
+          } else {
+            try {
+              spatialWhere = buildSpatialJoinWhere(
+                await queryAgriUniqueIdsForWhere(primaryWhere),
+              );
+            } catch {
+              // queryAgriUniqueIdsForWhere is currently disabled
+              // (AGRI_UNIQUEID_QUERY_ENABLED=false) and always throws here —
+              // hide rather than leave the layer stuck at its last "1=1"
+              // (every parcel in the country, not just the selection).
+              spatialWhere = "1=0";
+            }
+          }
           spatialMapLayers.forEach((sl) => {
             if (isMapImageOwnedLayer(sl)) return;
             if (sl.definitionExpression !== spatialWhere) {

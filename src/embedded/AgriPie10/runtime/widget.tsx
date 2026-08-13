@@ -16,6 +16,7 @@ import { agriNoDataLabel } from "../../../shared/agriNoDataLabel";
 import {
   buildSpatialJoinWhere,
   getAgriTableDataLayer,
+  queryAgriRegionDistrictMappings,
 } from "../../shared/agri-table-data-source";
 import { withEvapoAccessWhere } from "../../shared/feature-layer-data";
 import {
@@ -709,39 +710,26 @@ export default class AgriPie extends React.PureComponent<
     }
   };
 
+  // resolveFeatureLayersFromUseDataSources() always resolves exactly one
+  // shared Agri_table_data layer, so every viloyat maps to index 0 anyway
+  // (same as the layers[0] fallback in getFeatureLayerForViloyat) — no
+  // distinct-viloyat scan is needed; use the already-shared/cached region
+  // mapping only if multiple layers ever appear.
   private buildViloyatKeyToLayerIndex = async (
     layers: __esri.FeatureLayer[],
   ): Promise<void> => {
     this._viloyatKeyToLayerIndex = {};
+    if (layers.length <= 1) return;
 
-    for (let i = 0; i < layers.length; i++) {
-      const layer = layers[i];
-      if (!layer) continue;
-      try {
-        if (!layer.loaded && (layer as any).load) {
-          await layer.load();
+    try {
+      const rows = await queryAgriRegionDistrictMappings();
+      for (const row of rows) {
+        const key = this.makeViloyatKey(row.viloyat);
+        if (key && this._viloyatKeyToLayerIndex[key] === undefined) {
+          this._viloyatKeyToLayerIndex[key] = 0;
         }
-
-        const q = layer.createQuery();
-        (q as any).where = "1=1";
-        (q as any).outFields = ["viloyat"];
-        (q as any).returnGeometry = false;
-        (q as any).returnDistinctValues = true;
-        // PostgreSQL DISTINCT requires ORDER BY fields to be selected too.
-        (q as any).orderByFields = ["viloyat ASC"];
-        (q as any).num = 50000;
-
-        const res: any = await layer.queryFeatures(q);
-        const feats: any[] = res?.features ?? [];
-        for (const f of feats) {
-          const v = f?.attributes?.viloyat;
-          const key = this.makeViloyatKey(v);
-          if (key && this._viloyatKeyToLayerIndex[key] === undefined) {
-            this._viloyatKeyToLayerIndex[key] = i;
-          }
-        }
-      } catch (e) {}
-    }
+      }
+    } catch (e) {}
   };
 
   private ensureFeatureLayersResolved = async (): Promise<

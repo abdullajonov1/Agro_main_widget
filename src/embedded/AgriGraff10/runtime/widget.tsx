@@ -4129,6 +4129,10 @@ export default class AgriGraffWidget extends React.PureComponent<
     return resolved;
   };
 
+  // featureLayers/featureLayer here is always the single shared
+  // Agri_table_data layer (see initializeMapConnection), so a per-widget
+  // distinct-viloyat scan is redundant with the already-shared/cached
+  // queryAgriRegionDistrictMappings() — reuse it instead of re-querying.
   private buildViloyatKeyToLayerIndex = async (): Promise<void> => {
     const layers = this.state.featureLayers?.length
       ? this.state.featureLayers
@@ -4138,36 +4142,48 @@ export default class AgriGraffWidget extends React.PureComponent<
 
     const idx: Record<string, number> = {};
 
-    for (let i = 0; i < layers.length; i++) {
-      const layer = layers[i];
-      try {
-        if (!layer?.fields || layer.fields.length === 0) {
-          await layer.load();
-        }
-        const q = layer.createQuery();
-        (q as any).where = "1=1";
-        (q as any).outFields = ["viloyat"];
-        (q as any).returnGeometry = false;
-        (q as any).returnDistinctValues = true;
-        // PostgreSQL DISTINCT requires ORDER BY fields to be selected too.
-        (q as any).orderByFields = ["viloyat ASC"];
-        (q as any).num = 50000;
+    if (layers.length > 1) {
+      for (let i = 0; i < layers.length; i++) {
+        const layer = layers[i];
+        try {
+          if (!layer?.fields || layer.fields.length === 0) {
+            await layer.load();
+          }
+          const q = layer.createQuery();
+          (q as any).where = "1=1";
+          (q as any).outFields = ["viloyat"];
+          (q as any).returnGeometry = false;
+          (q as any).returnDistinctValues = true;
+          // PostgreSQL DISTINCT requires ORDER BY fields to be selected too.
+          (q as any).orderByFields = ["viloyat ASC"];
+          (q as any).num = 50000;
 
-        const res = await layer.queryFeatures(q);
-        const features = res?.features ?? [];
-        for (const f of features) {
-          const a: any = f.attributes || {};
-          const v = a?.viloyat;
-          const key = this.makeRegionDistrictKey(v != null ? String(v) : null);
-          if (key && idx[key] === undefined) idx[key] = i;
+          const res = await layer.queryFeatures(q);
+          const features = res?.features ?? [];
+          for (const f of features) {
+            const a: any = f.attributes || {};
+            const v = a?.viloyat;
+            const key = this.makeRegionDistrictKey(v != null ? String(v) : null);
+            if (key && idx[key] === undefined) idx[key] = i;
+          }
+        } catch (e) {
+
+        }
+      }
+    } else if (layers.length === 1) {
+      try {
+        const rows = await queryAgriRegionDistrictMappings();
+        for (const row of rows) {
+          const key = this.makeRegionDistrictKey(row.viloyat);
+          if (key && idx[key] === undefined) idx[key] = 0;
         }
       } catch (e) {
-        
+
       }
     }
 
     this._viloyatKeyToLayerIndex = idx;
-    
+
   };
 
   private getFeatureLayerForViloyat = (

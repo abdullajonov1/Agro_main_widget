@@ -4,8 +4,10 @@
  * Regions:  Hosted/regions/FeatureServer/5
  * Districts: Hosted/district/FeatureServer/3
  *
- * On viloyat/tuman selection the matching polygon outline is shown and its
- * extent is returned for view.goTo (preferred over crop MapImage hull).
+ * Outlines are drawn on GraphicsLayers from a one-shot JSON query.
+ * Putting the Hosted FeatureLayer on the map makes the JS API fire
+ * quantized PBF tile queries (f=pbf, resultType=tile) — those 400/500
+ * on detailed polygons such as Farg'ona (parent_cod = 1730).
  */
 import { loadArcGISJSAPIModules } from "jimu-arcgis";
 import { SessionManager } from "jimu-core";
@@ -60,7 +62,8 @@ const REGION_NAME_ALIAS_GROUPS: string[][] = [
   ["namangan"],
   ["buxoro", "bukhara", "buxara"],
   ["qashqadaryo", "kashkadarya", "kashkadaria", "qashqadarya", "kashkada"],
-  ["surxondaryo", "surkhandarya", "surxandarya"],
+  // "sukhandarya" (missing the 'r') is a typo in the WebMap's 2025 layer title.
+  ["surxondaryo", "surkhandarya", "surxandarya", "sukhandarya"],
   ["jizzax", "jizzakh", "jizakh"],
   ["sirdaryo", "syrdarya", "sirdarya"],
   ["navoiy", "navoi"],
@@ -108,6 +111,8 @@ function hostedParentCodFromName(name: string): number | null {
 
 type BoundaryModules = {
   FeatureLayer: any;
+  GraphicsLayer: any;
+  Graphic: any;
   IdentityManager: any;
 };
 
@@ -153,14 +158,19 @@ export function writeAgriAdminBordersVisible(visible: boolean): void {
 }
 
 let modulesPromise: Promise<BoundaryModules> | null = null;
+const detachedQueryLayers = new Map<string, any>();
 
 async function loadModules(): Promise<BoundaryModules> {
   if (!modulesPromise) {
     modulesPromise = loadArcGISJSAPIModules([
       "esri/layers/FeatureLayer",
+      "esri/layers/GraphicsLayer",
+      "esri/Graphic",
       "esri/identity/IdentityManager",
-    ]).then(([FeatureLayer, IdentityManager]) => ({
+    ]).then(([FeatureLayer, GraphicsLayer, Graphic, IdentityManager]) => ({
       FeatureLayer,
+      GraphicsLayer,
+      Graphic,
       IdentityManager,
     }));
   }
@@ -232,52 +242,74 @@ function pickField(layer: any, candidates: string[]): string | null {
   return null;
 }
 
-function buildOutlineRenderer(width = 2.2) {
+function buildOutlineSymbol(width = 2.2) {
   return {
-    type: "simple",
-    symbol: {
-      type: "simple-fill",
-      color: [0, 0, 0, 0],
-      outline: {
-        type: "simple-line",
-        color: [255, 255, 255, 0.95],
-        width,
-      },
+    type: "simple-fill",
+    color: [0, 0, 0, 0],
+    outline: {
+      type: "simple-line",
+      color: [255, 255, 255, 0.95],
+      width,
     },
   };
 }
 
-function createBoundaryLayer(
-  FeatureLayer: any,
-  opts: { id: string; title: string; url: string; outlineWidth?: number },
+function createOutlineGraphicsLayer(
+  GraphicsLayer: any,
+  opts: { id: string; title: string },
 ) {
-  const token = readAuthToken();
-  return new FeatureLayer({
+  return new GraphicsLayer({
     id: opts.id,
     title: opts.title,
-    url: opts.url,
     listMode: "hide",
-    legendEnabled: false,
-    popupEnabled: false,
-    labelingInfo: [],
-    labelsVisible: false,
-    outFields: ["*"],
     visible: false,
     opacity: 1,
-    definitionExpression: "1=0",
-    renderer: buildOutlineRenderer(opts.outlineWidth ?? 2.2),
-    ...(token ? { customParameters: { token } } : {}),
   });
 }
 
-function findLayerById(map: any, id: string, urlHint: string): any | null {
+function findLayerById(map: any, id: string): any | null {
   if (!map?.layers) return null;
-  return (
-    map.layers.find(
-      (layer: any) =>
-        layer?.id === id || String(layer?.url || "").includes(urlHint),
-    ) || null
-  );
+  return map.layers.find((layer: any) => layer?.id === id) || null;
+}
+
+function removeLegacyFeatureBoundaryLayers(map: any, urlHint: string): void {
+  if (!map?.layers || !urlHint) return;
+  const layers = map.layers.toArray?.() || [];
+  for (const layer of layers) {
+    const type = String(layer?.type || "").toLowerCase();
+    const url = String(layer?.url || "");
+    if (type === "feature" && url.includes(urlHint)) {
+      try {
+        map.remove(layer);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+/**
+ * Off-map FeatureLayer used only for queryFeatures / queryExtent.
+ * Never added to the view — that is what triggered the failing PBF tiles.
+ */
+async function getDetachedQueryLayer(
+  FeatureLayer: any,
+  url: string,
+): Promise<any> {
+  let layer = detachedQueryLayers.get(url);
+  if (!layer) {
+    layer = new FeatureLayer({
+      url,
+      outFields: ["*"],
+    });
+    detachedQueryLayers.set(url, layer);
+  }
+  try {
+    if (typeof layer.load === "function") await layer.load();
+  } catch {
+    /* query may still work after a partial load */
+  }
+  return layer;
 }
 
 /**
@@ -319,21 +351,19 @@ function resolveDistrictCode(
   return null;
 }
 
+/** Integer or text `parent_cod` — PBF tiles were strict about the unquoted form. */
+function buildNumericOrStringEquals(field: string, value: number): string {
+  const raw = String(value);
+  return `(${field} = ${raw} OR ${field} = '${escapeSql(raw)}')`;
+}
+
 async function resolveRegionWhere(
   layer: any,
   parentCod: number | null,
 ): Promise<string> {
   if (parentCod == null || !Number.isFinite(parentCod)) return "1=0";
-
-  try {
-    if (typeof layer.load === "function") await layer.load();
-  } catch {
-    /* continue */
-  }
-
   const field = pickField(layer, REGION_PARENT_COD_FIELDS) || "parent_cod";
-  // Exact Agrobank / eco-monitoring expression — one code, one field.
-  return `${field} = ${parentCod}`;
+  return buildNumericOrStringEquals(field, parentCod);
 }
 
 async function resolveDistrictWhere(
@@ -341,79 +371,140 @@ async function resolveDistrictWhere(
   districtCode: string | null,
 ): Promise<string> {
   if (!districtCode) return "1=0";
-
-  try {
-    if (typeof layer.load === "function") await layer.load();
-  } catch {
-    /* continue */
-  }
-
   const field = pickField(layer, DISTRICT_CODE_FIELDS) || "district";
   return `${field} = '${escapeSql(districtCode)}'`;
 }
 
-async function queryLayerExtentSafe(
-  layer: any,
-  where: string,
-): Promise<any | null> {
-  if (!layer || !where || where === "1=0") return null;
-  try {
-    const query = layer.createQuery();
-    query.where = where;
-    query.returnGeometry = true;
-    const extent = (await layer.queryExtent(query))?.extent;
-    if (isValidMapExtent(extent)) return extent;
-  } catch {
-    /* try features */
+function extentFromFeatures(features: any[]): any | null {
+  let merged: any = null;
+  for (const feature of features) {
+    const featureExtent = feature?.geometry?.extent;
+    if (!isValidMapExtent(featureExtent)) continue;
+    merged = merged
+      ? merged.union(featureExtent)
+      : featureExtent.clone?.() || featureExtent;
   }
-
-  try {
-    const query = layer.createQuery();
-    query.where = where;
-    query.returnGeometry = true;
-    query.outFields = [layer.objectIdField || "OBJECTID"];
-    query.num = 50;
-    const result = await layer.queryFeatures(query);
-    let merged: any = null;
-    for (const feature of result?.features || []) {
-      const featureExtent = feature?.geometry?.extent;
-      if (!isValidMapExtent(featureExtent)) continue;
-      merged = merged
-        ? merged.union(featureExtent)
-        : featureExtent.clone?.() || featureExtent;
-    }
-    return isValidMapExtent(merged) ? merged : null;
-  } catch {
-    return null;
-  }
+  return isValidMapExtent(merged) ? merged : null;
 }
 
-function ensureLayerOnMap(
-  map: any,
-  FeatureLayer: any,
-  opts: { id: string; title: string; url: string; urlHint: string; outlineWidth?: number },
-): any {
-  let layer = findLayerById(map, opts.id, opts.urlHint);
-  if (!layer) {
-    layer = createBoundaryLayer(FeatureLayer, opts);
-    map.add(layer);
-  } else {
+async function queryAndDrawOutline(opts: {
+  queryLayer: any;
+  outlineLayer: any;
+  Graphic: any;
+  where: string;
+  view: any;
+  outlineWidth: number;
+  bordersVisible: boolean;
+}): Promise<any | null> {
+  const {
+    queryLayer,
+    outlineLayer,
+    Graphic,
+    where,
+    view,
+    outlineWidth,
+    bordersVisible,
+  } = opts;
+
+  try {
+    outlineLayer.removeAll?.();
+  } catch {
+    /* ignore */
+  }
+
+  if (!queryLayer || !where || where === "1=0") {
+    hideLayer(outlineLayer);
+    return null;
+  }
+
+  const oidField = queryLayer.objectIdField || "OBJECTID";
+  const runQuery = async (maxAllowableOffset?: number): Promise<any[]> => {
+    const query = queryLayer.createQuery();
+    query.where = where;
+    query.returnGeometry = true;
+    query.outFields = [oidField];
+    query.num = 50;
+    if (maxAllowableOffset != null && maxAllowableOffset > 0) {
+      query.maxAllowableOffset = maxAllowableOffset;
+    }
+    const result = await queryLayer.queryFeatures(query);
+    return result?.features || [];
+  };
+
+  let features: any[] = [];
+  try {
+    // Full rings — same visual as the previous FeatureLayer outline.
+    // Do not generalize here: a 50–150 m offset made Farg'ona look jagged.
+    features = await runQuery();
+  } catch {
+    features = [];
+  }
+  if (!features.length) {
     try {
-      layer.renderer = buildOutlineRenderer(opts.outlineWidth ?? 2.2);
+      const resolution = Number(view?.resolution);
+      const fallbackOffset =
+        Number.isFinite(resolution) && resolution > 0 ? resolution * 0.25 : 5;
+      features = await runQuery(fallbackOffset);
+    } catch {
+      features = [];
+    }
+  }
+
+  const symbol = buildOutlineSymbol(outlineWidth);
+  for (const feature of features) {
+    if (!feature?.geometry) continue;
+    try {
+      outlineLayer.add(
+        new Graphic({
+          geometry: feature.geometry,
+          symbol,
+        }),
+      );
+    } catch {
+      /* skip bad graphic */
+    }
+  }
+
+  try {
+    outlineLayer.visible = bordersVisible && features.length > 0;
+  } catch {
+    /* ignore */
+  }
+
+  const fromFeatures = extentFromFeatures(features);
+  if (fromFeatures) return fromFeatures;
+
+  try {
+    const query = queryLayer.createQuery();
+    query.where = where;
+    query.returnGeometry = true;
+    const extent = (await queryLayer.queryExtent(query))?.extent;
+    if (isValidMapExtent(extent)) return extent;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function ensureOutlineLayer(
+  map: any,
+  GraphicsLayer: any,
+  opts: { id: string; title: string; urlHint: string },
+): any {
+  removeLegacyFeatureBoundaryLayers(map, opts.urlHint);
+  let layer = findLayerById(map, opts.id);
+  const type = String(layer?.type || "").toLowerCase();
+  if (layer && type !== "graphics") {
+    try {
+      map.remove(layer);
     } catch {
       /* ignore */
     }
-    const token = readAuthToken();
-    if (token) {
-      try {
-        layer.customParameters = {
-          ...(layer.customParameters || {}),
-          token,
-        };
-      } catch {
-        /* ignore */
-      }
-    }
+    layer = null;
+  }
+  if (!layer) {
+    layer = createOutlineGraphicsLayer(GraphicsLayer, opts);
+    map.add(layer);
   }
   return layer;
 }
@@ -422,7 +513,8 @@ function hideLayer(layer: any): void {
   if (!layer) return;
   try {
     layer.visible = false;
-    layer.definitionExpression = "1=0";
+    if (typeof layer.removeAll === "function") layer.removeAll();
+    if ("definitionExpression" in layer) layer.definitionExpression = "1=0";
   } catch {
     /* ignore */
   }
@@ -467,61 +559,70 @@ export async function syncAgriAdminBoundaries(
   const districtCode = resolveDistrictCode(selection);
 
   try {
-    const { FeatureLayer, IdentityManager } = await loadModules();
+    const { FeatureLayer, GraphicsLayer, Graphic, IdentityManager } =
+      await loadModules();
     registerServerToken(IdentityManager);
 
-    const regionLayer = ensureLayerOnMap(map, FeatureLayer, {
+    const regionOutline = ensureOutlineLayer(map, GraphicsLayer, {
       id: AGRI_REGION_BOUNDARY_LAYER_ID,
       title: "Region boundary",
-      url: AGRI_REGION_BOUNDARY_URL,
       urlHint: "Hosted/regions",
-      outlineWidth: 2.4,
     });
-    const districtLayer = ensureLayerOnMap(map, FeatureLayer, {
+    const districtOutline = ensureOutlineLayer(map, GraphicsLayer, {
       id: AGRI_DISTRICT_BOUNDARY_LAYER_ID,
       title: "District boundary",
-      url: AGRI_DISTRICT_BOUNDARY_URL,
       urlHint: "Hosted/district",
-      outlineWidth: 2.0,
     });
+    const regionQueryLayer = await getDetachedQueryLayer(
+      FeatureLayer,
+      AGRI_REGION_BOUNDARY_URL,
+    );
+    const districtQueryLayer = await getDetachedQueryLayer(
+      FeatureLayer,
+      AGRI_DISTRICT_BOUNDARY_URL,
+    );
 
     if (tuman) {
-      hideLayer(regionLayer);
-      const where = await resolveDistrictWhere(districtLayer, districtCode);
-      try {
-        districtLayer.definitionExpression = where;
-        districtLayer.visible = bordersVisible && where !== "1=0";
-      } catch {
-        /* ignore */
-      }
-      if (bordersVisible) bringToFront(map, districtLayer);
-      const extent = await queryLayerExtentSafe(districtLayer, where);
+      hideLayer(regionOutline);
+      const where = await resolveDistrictWhere(districtQueryLayer, districtCode);
+      const extent = await queryAndDrawOutline({
+        queryLayer: districtQueryLayer,
+        outlineLayer: districtOutline,
+        Graphic,
+        where,
+        view,
+        outlineWidth: 2.0,
+        bordersVisible,
+      });
+      if (bordersVisible) bringToFront(map, districtOutline);
       return {
         extent: isValidMapExtent(extent) ? extent : null,
         level: "district",
       };
     }
 
-    hideLayer(districtLayer);
+    hideLayer(districtOutline);
 
     if (viloyat || parentCod != null) {
-      const where = await resolveRegionWhere(regionLayer, parentCod);
-      try {
-        regionLayer.definitionExpression = where;
-        regionLayer.visible = bordersVisible && where !== "1=0";
-      } catch {
-        /* ignore */
-      }
-      if (bordersVisible) bringToFront(map, regionLayer);
-      const extent = await queryLayerExtentSafe(regionLayer, where);
+      const where = await resolveRegionWhere(regionQueryLayer, parentCod);
+      const extent = await queryAndDrawOutline({
+        queryLayer: regionQueryLayer,
+        outlineLayer: regionOutline,
+        Graphic,
+        where,
+        view,
+        outlineWidth: 2.4,
+        bordersVisible,
+      });
+      if (bordersVisible) bringToFront(map, regionOutline);
       return {
         extent: isValidMapExtent(extent) ? extent : null,
         level: "region",
       };
     }
 
-    hideLayer(regionLayer);
-    hideLayer(districtLayer);
+    hideLayer(regionOutline);
+    hideLayer(districtOutline);
     return { extent: null, level: "none" };
   } catch {
     return { extent: null, level: "none" };
@@ -539,8 +640,8 @@ export async function setAgriAdminBordersVisible(
     const map = view.map;
     if (!map) return;
     for (const layer of [
-      findLayerById(map, AGRI_REGION_BOUNDARY_LAYER_ID, "Hosted/regions"),
-      findLayerById(map, AGRI_DISTRICT_BOUNDARY_LAYER_ID, "Hosted/district"),
+      findLayerById(map, AGRI_REGION_BOUNDARY_LAYER_ID),
+      findLayerById(map, AGRI_DISTRICT_BOUNDARY_LAYER_ID),
     ]) {
       if (!layer) continue;
       try {
@@ -561,16 +662,6 @@ export async function clearAgriAdminBoundaries(
   lastSelection = {};
   const map = view?.map;
   if (!map) return;
-  const regionLayer = findLayerById(
-    map,
-    AGRI_REGION_BOUNDARY_LAYER_ID,
-    "Hosted/regions",
-  );
-  const districtLayer = findLayerById(
-    map,
-    AGRI_DISTRICT_BOUNDARY_LAYER_ID,
-    "Hosted/district",
-  );
-  hideLayer(regionLayer);
-  hideLayer(districtLayer);
+  hideLayer(findLayerById(map, AGRI_REGION_BOUNDARY_LAYER_ID));
+  hideLayer(findLayerById(map, AGRI_DISTRICT_BOUNDARY_LAYER_ID));
 }

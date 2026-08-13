@@ -1,7 +1,6 @@
 // AgriRegion - Pure UI widget that informs AgriFilter of region selections
 // Does NOT filter map directly, only displays data and notifies AgriFilter
 
-import FeatureLayer from "esri/layers/FeatureLayer";
 import { JimuMapView, JimuMapViewComponent } from "jimu-arcgis";
 import {
   AllWidgetProps,
@@ -1095,7 +1094,7 @@ export default class AgriRegion extends React.PureComponent<
     return layers;
   };
 
-  private detectAreaField = (layer: FeatureLayer): string | null => {
+  private detectAreaField = (layer: __esri.FeatureLayer): string | null => {
     if (!layer?.fields) return null;
     const candidates = [
       "maydon",
@@ -1280,8 +1279,16 @@ export default class AgriRegion extends React.PureComponent<
     const outName = statMode === "sum" ? "sum_m" : "cnt_m";
 
     for (const fl of layers) {
-      const layerForQuery = new FeatureLayer({ url: (fl as any).url });
-      await layerForQuery.load();
+      // Reuse the already-loaded Agri_table_data singleton — do not
+      // new FeatureLayer().load() per aggregate (extra FeatureServer?f=json).
+      const layerForQuery = fl as __esri.FeatureLayer;
+      if (!layerForQuery?.loaded && typeof (layerForQuery as any)?.load === "function") {
+        try {
+          await (layerForQuery as any).load();
+        } catch {
+          /* query may still succeed */
+        }
+      }
 
       const queryOne = async (scopedWhere: string): Promise<any[]> => {
         const q = layerForQuery.createQuery();

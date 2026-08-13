@@ -176,7 +176,8 @@ const REGION_NAME_ALIAS_GROUPS: string[][] = [
   ["namangan"],
   ["buxoro", "bukhara", "buxara"],
   ["qashqadaryo", "kashkadarya", "kashkadaria", "qashqadarya", "kashkada"],
-  ["surxondaryo", "surkhandarya", "surxandarya"],
+  // "sukhandarya" (missing the 'r') is a typo in the WebMap's 2025 layer title.
+  ["surxondaryo", "surkhandarya", "surxandarya", "sukhandarya"],
   ["jizzax", "jizzakh", "jizakh"],
   ["sirdaryo", "syrdarya", "sirdarya"],
   ["navoiy", "navoi"],
@@ -1106,6 +1107,9 @@ export function collectRegionYearLeafLayers(map: any): any[] {
   return out;
 }
 
+/** Region-year MapImage parent URLs whose load() already failed (e.g. deleted/renamed service) — never retry. */
+const regionYearPreloadFailedUrls = new Set<string>();
+
 /**
  * Load MapImage metadata for region-year leaves (current year, optional viloyat)
  * without toggling visibility. Speeds the first export when the user later
@@ -1133,13 +1137,17 @@ export async function preloadRegionYearMapImages(
   let loaded = 0;
   await Promise.all(
     Array.from(parents).map(async (layer) => {
+      const key = String(layer?.url || layer?.id || "");
+      if (key && regionYearPreloadFailedUrls.has(key)) return;
       try {
         if (typeof layer?.load === "function" && !layer.loaded) {
           await layer.load();
           loaded += 1;
         }
       } catch {
-        /* best-effort */
+        // Dead/renamed service on the server side — stop retrying it every
+        // year-change or widget mount.
+        if (key) regionYearPreloadFailedUrls.add(key);
       }
     }),
   );
@@ -1203,7 +1211,8 @@ const REGION_ALIAS_GROUPS: string[][] = [
   ["namangan", "namangan"],
   ["buxoro", "bukhara", "buxara"],
   ["qashqadaryo", "kashkadarya", "kashkadaria", "qashqadarya", "kashkada"],
-  ["surxondaryo", "surkhandarya", "surxandarya"],
+  // "sukhandarya" (missing the 'r') is a typo in the WebMap's 2025 layer title.
+  ["surxondaryo", "surkhandarya", "surxandarya", "sukhandarya"],
   ["jizzax", "jizzakh", "jizakh"],
   ["sirdaryo", "syrdarya", "sirdarya"],
   ["navoiy", "navoi"],
