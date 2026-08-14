@@ -44,6 +44,7 @@ import {
   resolveAllowedViloyatsForGroups,
 } from "../../../shared/agri-access-config";
 import {
+  AGRI_TABLE_DATA_URL,
   getAgriTableDataLayer,
   queryAgriUniqueIdsForWhere,
   queryAgriRegionDistrictMappings,
@@ -6626,8 +6627,17 @@ export default class AgriLocalization extends React.PureComponent<
 
     if (featureLayers?.length) {
       featureLayers.forEach((fl) => {
-        // includeVh=true attaches uniqueid IN (...) when AgriBar is active.
-        let where = this.buildWhereForLayer(fl, true);
+        const isAgriTable = /agri_table_data/i.test(
+          String((fl as any)?.url || AGRI_TABLE_DATA_URL),
+        );
+        // Charts query Agri_table_data in republic mode (year only).
+        // Map polygons still stay hidden until a viloyat is selected.
+        let where = this.buildWhereForLayer(
+          fl,
+          true,
+          true,
+          isAgriTable,
+        );
         const statusClause = this.buildNdviStatusClauseForCurrentVh();
         if (statusClause && where && where !== "1=0") {
           where = `(${where}) AND (${statusClause})`;
@@ -6638,6 +6648,10 @@ export default class AgriLocalization extends React.PureComponent<
           }
         }
         if (fl.definitionExpression !== where) fl.definitionExpression = where;
+        if (isAgriTable && !this.getEffectiveViloyat()) {
+          if (primaryWhere == null) primaryWhere = "1=0";
+          return;
+        }
         if (where && where !== "1=0") {
           primaryWhere = where;
         } else if (primaryWhere == null) {

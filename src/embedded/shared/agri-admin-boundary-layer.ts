@@ -1,5 +1,5 @@
 /**
- * Administrative boundary outlines for Agro_widgetV4 map.
+ * Administrative boundary outlines for Agro_widgetV5 map.
  *
  * Regions:  Hosted/regions/FeatureServer/5
  * Districts: Hosted/district/FeatureServer/3

@@ -462,53 +462,25 @@ export default class AgriPie extends React.PureComponent<
   }
 
   findCategoryField(flOverride?: __esri.FeatureLayer | null): string | null {
-    const possible = [
-      // ✅ enforce turi first
-      "turi",
+    // Exact names only — partial "tur" used to match `tuman`.
+    const possible = ["turi", "ekin_turi", "crop_type"];
 
-      // legacy fallback (keep if some layer still has this)
-      "tur",
+    const fl = flOverride ?? this.state.activeFeatureLayer;
+    const fields = fl?.fields ?? [];
+    if (fields.length) {
+      const byLower = new Map(
+        fields.map((f: any) => [String(f.name).toLowerCase(), f.name]),
+      );
+      for (const p of possible) {
+        const exact = byLower.get(p.toLowerCase());
+        if (exact) return exact;
+      }
+    }
 
-      // other possible naming
-      "toifa",
-      "yer_toifa",
-      "yertoifa",
-      "land_category",
-      "land_type",
-      "category",
-      "type",
-      "class",
-    ];
-
-    // 1) Prefer DS schema (fast)
     const fromDS = this.findFieldByPossibleNames(possible);
     if (fromDS) return fromDS;
 
-    // 2) Fallback to active feature layer fields
-    const fl = flOverride ?? this.state.activeFeatureLayer;
-    const fields = fl?.fields ?? [];
-    if (!fields.length) return null;
-
-    const byLower = new Map(
-      fields.map((f: any) => [String(f.name).toLowerCase(), f.name]),
-    );
-
-    // exact match first
-    for (const p of possible) {
-      const exact = byLower.get(p.toLowerCase());
-      if (exact) return exact;
-    }
-
-    // partial match
-    const lowerNames = Array.from(byLower.keys());
-    for (const p of possible) {
-      const partialIdx = lowerNames.findIndex((n) =>
-        n.includes(p.toLowerCase()),
-      );
-      if (partialIdx !== -1) return byLower.get(lowerNames[partialIdx]) ?? null;
-    }
-
-    return null;
+    return "turi";
   }
 
   private buildWhereClauseForDS(
@@ -518,13 +490,14 @@ export default class AgriPie extends React.PureComponent<
     const includeViloyat = opts.includeViloyat !== false;
     // Match Agro_widgetV1: scope by selected viloyat (not lockedViloyat)
     // when includeViloyat is on; layer routing handles region layers.
-    const { yil, viloyat, tuman, turi } = this.state;
+    const { yil, viloyat, tuman, turi, lockedViloyat } = this.state;
     const clauses: string[] = [];
+    const scopeViloyat = String(viloyat || lockedViloyat || "").trim();
 
-    if (includeViloyat && viloyat)
-      clauses.push(this.eqAposSmart("viloyat", viloyat));
+    if (includeViloyat && scopeViloyat)
+      clauses.push(this.eqAposSmart("viloyat", scopeViloyat));
     // In default republic mode (no viloyat), ignore stale tuman filter.
-    if (tuman && (includeViloyat || !!viloyat))
+    if (tuman && includeViloyat && scopeViloyat)
       clauses.push(this.eqAposSmart("tuman", tuman));
 
     if (yil) {
@@ -1381,8 +1354,8 @@ export default class AgriPie extends React.PureComponent<
     // Build next state - only update fields that are present in the event
     const nextState: Partial<AgriPieState> = {};
 
-    if (hasViloyat) {
-      nextState.viloyat = this.normalizeName(hasViloyat);
+    if (hasViloyat || Object.prototype.hasOwnProperty.call(d, "viloyat")) {
+      nextState.viloyat = this.normalizeName(String(d.viloyat || d.massivNom || ""));
     }
 
     if (hasTuman) {
@@ -1435,8 +1408,8 @@ export default class AgriPie extends React.PureComponent<
 
     this.setState(
       {
-        viloyat: vil || this.state.viloyat,
-        tuman: tum || "",
+        viloyat: vil,
+        tuman: tum,
         yil: this.state.yil,
         turi: "",
         turlar: [],
@@ -2004,10 +1977,9 @@ export default class AgriPie extends React.PureComponent<
         this.setState({ error: null });
       }
 
-      const activeFl = await this.ensureFeatureLayersResolved();
-
-      // Find category field on the active layer (fallback to DS schema if available)
-      const categoryField = this.findCategoryField(activeFl ?? null);
+      const { layer: tableLayer } = await getAgriTableDataLayer();
+      const categoryField =
+        this.findCategoryField(tableLayer as __esri.FeatureLayer) || "turi";
       if (!categoryField) {
         this._hasCompletedFetch = true;
         this.setState({
@@ -2044,43 +2016,18 @@ export default class AgriPie extends React.PureComponent<
         }
       }
 
+      const scopeViloyat = String(
+        this.state.viloyat || this.state.lockedViloyat || "",
+      ).trim();
       const whereClause = this.buildWhereClauseForDS({
         includeCategory: false,
-        // Agri_table_data is one canonical republic table. Routing can return
-        // that same table for every region, so the viloyat predicate must stay.
-        includeViloyat: true,
+        // Republic (no viloyat) must not inherit a leftover region predicate.
+        includeViloyat: !!scopeViloyat,
       });
 
-      const allLayers = (this.state.featureLayers || []).filter(Boolean);
-      let layersForQuery: __esri.FeatureLayer[] = [];
-
-      if (selectedViloyat) {
-        const routed = this.getFeatureLayerForViloyat(selectedViloyat);
-        if (routed) layersForQuery = [routed];
-      }
-
-      if (!layersForQuery.length) {
-        // Default (no viloyat) must show republic-wide totals, so use only the
-        // canonical/republic layer instead of summing regional layers.
-        const defaultLayer = this.getDefaultFeatureLayer(allLayers);
-        layersForQuery = defaultLayer ? [defaultLayer] : activeFl ? [activeFl] : [];
-      }
-
-      if (!layersForQuery.length) {
-        const dsAny = this.state.dataSource as any;
-        const dsLayer: __esri.FeatureLayer | undefined =
-          dsAny?.layer ?? dsAny?.getLayer?.();
-        if (dsLayer) layersForQuery = [dsLayer];
-      }
-
-      if (!layersForQuery.length) {
-        this._hasCompletedFetch = true;
-        this.setState({
-          loading: false,
-          error: "FeatureLayer not available for this data source.",
-        });
-        return;
-      }
+      const layersForQuery: __esri.FeatureLayer[] = [
+        tableLayer as __esri.FeatureLayer,
+      ];
 
       const merged = new Map<string, { key: string; value: number }>();
       const vhChunks = this.buildPieVhWhereChunks();
