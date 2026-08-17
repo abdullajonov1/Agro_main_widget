@@ -249,6 +249,42 @@ export function isMapImageGroupSublayer(layer: any): boolean {
   return false;
 }
 
+/** Skip Group Layer folders — FeatureLayer#load logs unsupported-type noise. */
+export async function safeLoadMapLayer(layer: any): Promise<boolean> {
+  if (!layer || isMapImageGroupSublayer(layer)) return false;
+  if (typeof layer.load !== "function") return false;
+  if (layer.loaded) return true;
+  try {
+    await layer.load();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Load MapImage metadata; recurse into group folders without load() on them. */
+export async function safeLoadMapImageTree(root: any): Promise<void> {
+  if (!root) return;
+  const walk = async (node: any): Promise<void> => {
+    if (!node) return;
+    if (isMapImageGroupSublayer(node)) {
+      const kids =
+        node?.allSublayers?.toArray?.() ||
+        node?.sublayers?.toArray?.() ||
+        [];
+      await Promise.all(kids.map((kid: any) => walk(kid)));
+      return;
+    }
+    await safeLoadMapLayer(node);
+    const kids =
+      node?.allSublayers?.toArray?.() ||
+      node?.sublayers?.toArray?.() ||
+      [];
+    if (kids.length) await Promise.all(kids.map((kid: any) => walk(kid)));
+  };
+  await walk(root);
+}
+
 /** True for FeatureLayer and MapImageLayer sublayers that support query APIs. */
 export function isQueryableFieldLayer(layer: any): boolean {
   if (!layer) return false;
@@ -1470,7 +1506,7 @@ export async function resolveFeatureLayerForFilters(
     }
 
     const layer = best || pool[0]?.candidate || candidates[0];
-    if (typeof layer.load === "function") await layer.load();
+    await safeLoadMapLayer(layer);
     disableLayerPbf(layer);
     const fields: string[] = (layer.fields || []).map((f: any) => f.name);
     const haystack = `${String(layer?.title || "")} ${String(layer?.url || "")}`;
@@ -1501,7 +1537,7 @@ export async function getFeatureLayerFromView(
     const candidates = getAllFeatureLayersFromMap(jimuMapView.view.map);
     const layer = candidates[0];
     if (!layer) return null;
-    if (typeof layer.load === "function") await layer.load();
+    await safeLoadMapLayer(layer);
     const fields: string[] = (layer.fields || []).map((f: any) => f.name);
     return { layer, fields };
   } catch {

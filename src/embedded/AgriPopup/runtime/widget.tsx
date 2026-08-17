@@ -58,6 +58,7 @@ import {
   isMapImageOwnedLayer,
   isQueryableFieldLayer,
   normalizeQueryableLayerUrl,
+  safeLoadMapLayer,
 } from "../../shared/feature-layer-data";
 import {
   formatArcgisDateToYmd,
@@ -1310,11 +1311,7 @@ export default class AgriPolygon extends React.PureComponent<
     // districts' fields.
     const definitionSnapshot = this.snapshotDefinitionExpressions(mapLayers);
     for (const layer of mapLayers) {
-      try {
-        if (typeof layer.load === "function") await layer.load();
-      } catch {
-        /* ignore */
-      }
+      await safeLoadMapLayer(layer);
       this.addResolvedLayer(resolvedLayers, layerKeyToDsId, seen, layer);
     }
     this.restoreDriftedDefinitionExpressions(definitionSnapshot);
@@ -1332,11 +1329,7 @@ export default class AgriPolygon extends React.PureComponent<
         const layer = await this.resolveFeatureLayerForUseDataSource(jmv, useDs);
         if (!layer) continue;
 
-        try {
-          await layer.load();
-        } catch {
-          /* ignore */
-        }
+        await safeLoadMapLayer(layer);
 
         const dsId = String(useDs?.dataSourceId || "");
         const live = this.toLiveMapLayer(layer, view.map) || layer;
@@ -2131,11 +2124,7 @@ export default class AgriPolygon extends React.PureComponent<
     try {
       const mapLayers = getAllFeatureLayersFromMap(view.map);
       for (const layer of mapLayers) {
-        try {
-          if (typeof layer.load === "function") await layer.load();
-        } catch {
-          /* ignore */
-        }
+        await safeLoadMapLayer(layer);
       }
     } catch {
       /* ignore */
@@ -2672,7 +2661,7 @@ export default class AgriPolygon extends React.PureComponent<
         if (
           !isLoaded &&
           !isMapImageOwnedLayer(clickedLayer) &&
-          typeof (clickedLayer as any).load === "function"
+          !isMapImageGroupSublayer(clickedLayer)
         ) {
           evapoMapClickDebug("layer:load-required", {
             title: clickedLayer.title,
@@ -2680,7 +2669,7 @@ export default class AgriPolygon extends React.PureComponent<
             definitionExpression:
               (clickedLayer as any).definitionExpression || null,
           });
-          await (clickedLayer as any).load();
+          await safeLoadMapLayer(clickedLayer);
         } else {
           evapoMapClickDebug("layer:load-skip-already-loaded", {
             title: clickedLayer.title,

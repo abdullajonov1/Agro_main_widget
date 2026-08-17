@@ -11,6 +11,7 @@ import {
   prepareValueIndex,
   quickLayerFeatureCount,
   resolveFeatureLayerForFilters,
+  safeLoadMapLayer,
   scoreHaystackForFilters,
   type EvapoFilters,
   type ResolvedFeatureLayer,
@@ -131,7 +132,7 @@ export class EvapoDataSourceEngine {
       const layer = this.getLayerFromDs(item.ds);
       if (!layer) return;
       try {
-        if (typeof layer.load === "function") await layer.load();
+        await safeLoadMapLayer(layer);
       } catch {
         /* ignore */
       }
@@ -226,7 +227,7 @@ export class EvapoDataSourceEngine {
     if (!layer) return null;
 
     try {
-      if (typeof layer.load === "function") await layer.load();
+      await safeLoadMapLayer(layer);
     } catch {
       /* layer may already be loaded */
     }

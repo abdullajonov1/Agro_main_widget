@@ -25,8 +25,11 @@ import {
   expandDistrictVariants,
   getDetachedQueryLayerFor,
   getQueryableLayer,
+  isMapImageGroupSublayer,
   isMapImageOwnedLayer,
   preloadRegionYearMapImages,
+  safeLoadMapImageTree,
+  safeLoadMapLayer,
   syncRegionYearLayerVisibility,
   withEvapoAccessWhere,
   type ShownRegionYearLayer,
@@ -781,7 +784,9 @@ export default class AgriLocalization extends React.PureComponent<
         [];
       const fromLoaded: any[] = [];
       for (const sub of loaded) {
-        if (sub?.visible !== false) fromLoaded.push(sub);
+        if (sub?.visible !== false && !isMapImageGroupSublayer(sub)) {
+          fromLoaded.push(sub);
+        }
       }
       if (fromEntry.length || fromLoaded.length) {
         candidates.push(...fromEntry, ...fromLoaded);
@@ -792,7 +797,9 @@ export default class AgriLocalization extends React.PureComponent<
 
     const seen = new Set<any>();
     return candidates.filter((layer) => {
-      if (!layer || seen.has(layer)) return false;
+      if (!layer || seen.has(layer) || isMapImageGroupSublayer(layer)) {
+        return false;
+      }
       const where = String(layer?.definitionExpression || "1=1");
       if (layer?.visible === false || where === "1=0") return false;
       seen.add(layer);
@@ -982,10 +989,10 @@ export default class AgriLocalization extends React.PureComponent<
         if (
           !layer?.loaded &&
           !isMapImageOwnedLayer(layer) &&
-          typeof layer?.load === "function"
+          !isMapImageGroupSublayer(layer)
         ) {
           try {
-            await layer.load();
+            await safeLoadMapLayer(layer);
           } catch {}
         }
         if (!isCurrent()) return;
@@ -2978,21 +2985,7 @@ export default class AgriLocalization extends React.PureComponent<
     let jlv = matchByDsId(dsId) || (rootDsId ? matchByDsId(rootDsId) : null);
     // MapImage sublayers often aren't queryable until the parent finishes loading.
     try {
-      const rootLayer: any = jlv?.layer;
-      if (rootLayer && typeof rootLayer.load === "function") {
-        await rootLayer.load();
-      }
-      const allSubs =
-        rootLayer?.allSublayers?.toArray?.() ||
-        rootLayer?.sublayers?.toArray?.() ||
-        [];
-      for (const sub of allSubs) {
-        try {
-          if (typeof sub?.load === "function") await sub.load();
-        } catch {
-          /* ignore */
-        }
-      }
+      await safeLoadMapImageTree(jlv?.layer);
     } catch {
       /* ignore */
     }
@@ -7385,7 +7378,7 @@ export default class AgriLocalization extends React.PureComponent<
           if (isMapImageOwnedLayer(spatialLayer)) continue;
           try {
             if (typeof (spatialLayer as any)?.load === "function") {
-              await (spatialLayer as any).load();
+              await safeLoadMapLayer(spatialLayer);
             }
             if (!(spatialLayer as any)?.geometryType) continue;
             const where = (spatialLayer as any)?.definitionExpression || "1=1";
