@@ -53,6 +53,19 @@ export interface AccessConfig {
   rules: AccessFieldRule[];
 }
 
+export interface AgriServiceUrlsConfig {
+  portalOrigin?: string;
+  portalUrl?: string;
+  arcgisServer?: string;
+  tableDataUrl?: string;
+  vegetationIndicesUrl?: string;
+  polygonApiBaseUrl?: string;
+  adminRegionsUrl?: string;
+  adminDistrictsUrl?: string;
+  reserveLandUrl?: string;
+  unusedLandUrl?: string;
+}
+
 export interface Config {
   leftPanelWidthPercent?: number;
   bottomRowFraction?: number;
@@ -61,6 +74,8 @@ export interface Config {
   indicator?: IndicatorChildConfig;
   agriPopup?: AgriPopupConfig;
   accessConfig?: AccessConfig;
+  /** Optional overrides for hardcoded ArcGIS / REST endpoints. */
+  serviceUrls?: AgriServiceUrlsConfig;
 }
 
 export type IMConfig = ImmutableObject<Config>;

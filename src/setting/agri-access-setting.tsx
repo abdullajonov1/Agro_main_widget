@@ -3,7 +3,11 @@ import type { AllWidgetSettingProps } from "jimu-for-builder";
 import { Button } from "jimu-ui";
 import { loadArcGISJSAPIModules } from "jimu-arcgis";
 import { type IMConfig } from "../config";
-import { buildAccessRuleWhere } from "../shared/agri-access-config";
+import {
+    buildAccessRuleWhere,
+    summarizeAccessConfigDiff,
+    validateAccessConfigImport,
+} from "../shared/agri-access-config";
 import "./agri-access-setting.css";
 
 /** jimu-core re-exports seamless-immutable as a namespace; cast for callable use. */
@@ -252,6 +256,8 @@ export default function AgriAccessSettingPanel(
         setConfig(next);
         setSavedConfig(next);
         setHasUnsavedChanges(false);
+        // Only accessConfig — full props.config would reset drafts on unrelated
+        // setting patches (layout, serviceUrls) and discard unsaved edits.
     }, [props.config?.accessConfig]);
 
     const setDraftConfig = (
@@ -318,6 +324,8 @@ export default function AgriAccessSettingPanel(
         return () => {
             isCancelled = true;
         };
+        // groupIdsSignature is derived from config group ids — intentional
+        // dependency (avoids re-fetch on unrelated AccessConfig field edits).
     }, [groupIdsSignature]);
 
     const [selectedId, setSelectedId] = React.useState<string>(GLOBAL_ACCESS_ID);
@@ -907,9 +915,39 @@ export default function AgriAccessSettingPanel(
         reader.onload = () => {
             try {
                 const parsed = JSON.parse(String(reader.result));
-                const normalized = normalizeLoadedConfig(parsed);
+                const validated = validateAccessConfigImport(parsed);
+                if (validated.ok === false) {
+                    alert(
+                        "Неверная структура JSON / invalid access config:\n" +
+                            validated.errors.slice(0, 8).join("\n"),
+                    );
+                    return;
+                }
 
-                setDraftConfig(() => normalized);
+                const importedConfig = validated.config;
+                const importedGroupIds = getConfigGroupIds(importedConfig);
+                const knownGroupIds = Object.keys(groupsInfo);
+                if (knownGroupIds.length > 0 && importedGroupIds.length > 0) {
+                    const unknownGroupIds = importedGroupIds.filter(
+                        (groupId) => !(groupId in groupsInfo),
+                    );
+                    if (unknownGroupIds.length > 0) {
+                        const proceed = window.confirm(
+                            "Warning / Предупреждение: imported config references group IDs not found in portal:\n" +
+                                unknownGroupIds.join("\n") +
+                                "\n\nContinue import?",
+                        );
+                        if (!proceed) return;
+                    }
+                }
+
+                const diff = summarizeAccessConfigDiff(config, importedConfig);
+                const confirmed = window.confirm(
+                    "Import access config?\n\n" + diff + "\n\nApply to draft?",
+                );
+                if (!confirmed) return;
+
+                setDraftConfig(() => importedConfig);
                 setSelectedId(GLOBAL_ACCESS_ID);
                 resetSelection();
             } catch {
@@ -1090,9 +1128,9 @@ export default function AgriAccessSettingPanel(
             <div className="settingsContent">
                 <div className="accessControlCard">
                     <div className="accessControlHeader">
-                        <div className="accessControlTitle">Доступ к данным</div>
+                        <div className="accessControlTitle">Data access / Доступ к данным</div>
                         <div className="accessControlDescription">
-                            Настройте группы и условия отображения объектов
+                            Configure groups and feature visibility rules / Настройте группы и условия отображения объектов
                         </div>
                     </div>
 
@@ -1102,7 +1140,7 @@ export default function AgriAccessSettingPanel(
                         className="accessSettingsButton"
                         onClick={() => setShowModal(true)}
                     >
-                        Настройка доступа
+                        Настройка доступа / Access settings
                     </Button>
                 </div>
             </div>
@@ -1118,7 +1156,7 @@ export default function AgriAccessSettingPanel(
                         <div className="modalList">
                             <div className="modalListHeader">
                                 <div>
-                                    <div className="modalListTitle">Правила доступа</div>
+                                    <div className="modalListTitle">Access rules / Правила доступа</div>
                                     <div className="modalListSubtitle">JSON access config</div>
                                 </div>
                             </div>
@@ -1128,7 +1166,7 @@ export default function AgriAccessSettingPanel(
                                     }`}
                                 onClick={() => selectLeftItem(GLOBAL_ACCESS_ID)}
                             >
-                                <div className="modalItemTitle">Полный доступ</div>
+                                <div className="modalItemTitle">Full access / Полный доступ</div>
                                 <div className="modalItemInfo">
                                     Условие: <span>1=1</span>
                                 </div>
@@ -1149,14 +1187,14 @@ export default function AgriAccessSettingPanel(
                                     </div>
                                 ))}
 
-                                <button className="addFieldButton" onClick={openAddField}>
+                                <button className="addFieldButton" onClick={openAddField} title="Add field / Добавить столбец">
                                     +
                                 </button>
                             </div>
 
                             <div className="modalBottomActions">
                                 <label className="jsonButton">
-                                    Загрузить JSON
+                                    Import / Загрузить JSON
                                     <input
                                         type="file"
                                         accept="application/json"
@@ -1165,7 +1203,7 @@ export default function AgriAccessSettingPanel(
                                 </label>
 
                                 <button className="jsonButton" onClick={downloadJson}>
-                                    Скачать JSON
+                                    Export / Скачать JSON
                                 </button>
                             </div>
                         </div>
@@ -1176,12 +1214,12 @@ export default function AgriAccessSettingPanel(
                                     <>
                                         <div className="rightHeader">
                                             <div>
-                                                <div className="rightTitle">Полный доступ</div>
+                                                <div className="rightTitle">Full access / Полный доступ</div>
                                                 <div className="rightField">Условие: 1=1</div>
                                             </div>
 
                                             <button className="smallButton" onClick={openAddGlobalGroup}>
-                                                + Добавить группу
+                                                + Add group / Добавить группу
                                             </button>
                                         </div>
 
@@ -1194,7 +1232,7 @@ export default function AgriAccessSettingPanel(
                                                         className="dangerButtonSmall"
                                                         onClick={deleteSelectedGroups}
                                                     >
-                                                        Удалить выбранные
+                                                        Delete selected / Удалить выбранные
                                                     </button>
                                                 </div>
                                             )}
@@ -1289,7 +1327,7 @@ export default function AgriAccessSettingPanel(
                                                         className="dangerButtonSmall"
                                                         onClick={deleteSelectedRules}
                                                     >
-                                                        Удалить выбранные
+                                                        Delete selected / Удалить выбранные
                                                     </button>
                                                 </div>
                                             )}
@@ -1302,7 +1340,7 @@ export default function AgriAccessSettingPanel(
                                                         className="dangerButtonSmall"
                                                         onClick={deleteSelectedGroups}
                                                     >
-                                                        Удалить выбранные
+                                                        Delete selected / Удалить выбранные
                                                     </button>
                                                 </div>
                                             )}
@@ -1438,7 +1476,7 @@ export default function AgriAccessSettingPanel(
                                             )}
 
                                             <button className="addRuleButton" onClick={openAddRule}>
-                                                + Добавить правило
+                                                + Add rule / Добавить правило
                                             </button>
                                         </div>
                                     </>
@@ -1460,7 +1498,7 @@ export default function AgriAccessSettingPanel(
                                         onClick={cancelConfigChanges}
                                         disabled={!hasUnsavedChanges}
                                     >
-                                        Отменить
+                                        Cancel / Отменить
                                     </button>
 
                                     <button
@@ -1469,7 +1507,7 @@ export default function AgriAccessSettingPanel(
                                         onClick={applyConfig}
                                         disabled={!hasUnsavedChanges}
                                     >
-                                        Применить
+                                        Apply / Применить
                                     </button>
                                 </div>
                             </div>
@@ -1483,8 +1521,8 @@ export default function AgriAccessSettingPanel(
                                     <>
                                         <div className="dialogTitle">
                                             {dialog.type === "addField"
-                                                ? "Добавить столбец"
-                                                : "Редактировать столбец"}
+                                                ? "Add field / Добавить столбец"
+                                                : "Edit field / Редактировать столбец"}
                                         </div>
 
                                         <input
@@ -1511,23 +1549,23 @@ export default function AgriAccessSettingPanel(
                                         )}
 
                                         <div className="dialogActions">
-                                            <button onClick={() => setDialog(null)}>Отмена</button>
-                                            <button onClick={saveField}>Сохранить</button>
+                                            <button onClick={() => setDialog(null)}>Cancel / Отмена</button>
+                                            <button onClick={saveField}>Save / Сохранить</button>
                                         </div>
                                     </>
                                 )}
 
                                 {dialog.type === "deleteField" && (
                                     <>
-                                        <div className="dialogTitle">Удалить столбец?</div>
+                                        <div className="dialogTitle">Delete field? / Удалить столбец?</div>
                                         <div className="dialogText">
                                             Все правила внутри него тоже будут удалены.
                                         </div>
 
                                         <div className="dialogActions">
-                                            <button onClick={() => setDialog(null)}>Отмена</button>
+                                            <button onClick={() => setDialog(null)}>Cancel / Отмена</button>
                                             <button className="dangerButton" onClick={deleteField}>
-                                                Удалить
+                                                Delete / Удалить
                                             </button>
                                         </div>
                                     </>
@@ -1537,30 +1575,30 @@ export default function AgriAccessSettingPanel(
                                     <>
                                         <div className="dialogTitle">
                                             {dialog.type === "addRule"
-                                                ? "Добавить правило"
-                                                : "Редактировать правило"}
+                                                ? "Add rule / Добавить правило"
+                                                : "Edit rule / Редактировать правило"}
                                         </div>
 
                                         {renderRuleForm()}
 
                                         <div className="dialogActions">
-                                            <button onClick={() => setDialog(null)}>Отмена</button>
-                                            <button onClick={saveRule}>Сохранить</button>
+                                            <button onClick={() => setDialog(null)}>Cancel / Отмена</button>
+                                            <button onClick={saveRule}>Save / Сохранить</button>
                                         </div>
                                     </>
                                 )}
 
                                 {dialog.type === "deleteRule" && (
                                     <>
-                                        <div className="dialogTitle">Удалить правило?</div>
+                                        <div className="dialogTitle">Delete rule? / Удалить правило?</div>
                                         <div className="dialogText">
                                             Группы внутри этого правила тоже будут удалены.
                                         </div>
 
                                         <div className="dialogActions">
-                                            <button onClick={() => setDialog(null)}>Отмена</button>
+                                            <button onClick={() => setDialog(null)}>Cancel / Отмена</button>
                                             <button className="dangerButton" onClick={deleteRule}>
-                                                Удалить
+                                                Delete / Удалить
                                             </button>
                                         </div>
                                     </>
@@ -1582,23 +1620,23 @@ export default function AgriAccessSettingPanel(
                                         />
 
                                         <div className="dialogActions">
-                                            <button onClick={() => setDialog(null)}>Отмена</button>
-                                            <button onClick={saveGroup}>Сохранить</button>
+                                            <button onClick={() => setDialog(null)}>Cancel / Отмена</button>
+                                            <button onClick={saveGroup}>Save / Сохранить</button>
                                         </div>
                                     </>
                                 )}
 
                                 {dialog.type === "deleteGroup" && (
                                     <>
-                                        <div className="dialogTitle">Удалить группу?</div>
+                                        <div className="dialogTitle">Delete group? / Удалить группу?</div>
                                         <div className="dialogText">
                                             Группа будет удалена только из этого правила.
                                         </div>
 
                                         <div className="dialogActions">
-                                            <button onClick={() => setDialog(null)}>Отмена</button>
+                                            <button onClick={() => setDialog(null)}>Cancel / Отмена</button>
                                             <button className="dangerButton" onClick={deleteGroup}>
-                                                Удалить
+                                                Delete / Удалить
                                             </button>
                                         </div>
                                     </>
@@ -1609,8 +1647,8 @@ export default function AgriAccessSettingPanel(
                                         <>
                                             <div className="dialogTitle">
                                                 {dialog.type === "addGlobalGroup"
-                                                    ? "Добавить группу полного доступа"
-                                                    : "Редактировать группу полного доступа"}
+                                                    ? "Add full-access group / Добавить группу полного доступа"
+                                                    : "Edit full-access group / Редактировать группу полного доступа"}
                                             </div>
 
                                             <input
@@ -1621,8 +1659,8 @@ export default function AgriAccessSettingPanel(
                                             />
 
                                             <div className="dialogActions">
-                                                <button onClick={() => setDialog(null)}>Отмена</button>
-                                                <button onClick={saveGlobalGroup}>Сохранить</button>
+                                                <button onClick={() => setDialog(null)}>Cancel / Отмена</button>
+                                                <button onClick={saveGlobalGroup}>Save / Сохранить</button>
                                             </div>
                                         </>
                                     )}
@@ -1630,19 +1668,19 @@ export default function AgriAccessSettingPanel(
                                 {dialog.type === "deleteGlobalGroup" && (
                                     <>
                                         <div className="dialogTitle">
-                                            Удалить группу полного доступа?
+                                            Delete full-access group? / Удалить группу полного доступа?
                                         </div>
                                         <div className="dialogText">
                                             Эта группа больше не будет получать доступ ко всем данным.
                                         </div>
 
                                         <div className="dialogActions">
-                                            <button onClick={() => setDialog(null)}>Отмена</button>
+                                            <button onClick={() => setDialog(null)}>Cancel / Отмена</button>
                                             <button
                                                 className="dangerButton"
                                                 onClick={deleteGlobalGroup}
                                             >
-                                                Удалить
+                                                Delete / Удалить
                                             </button>
                                         </div>
                                     </>

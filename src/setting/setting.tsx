@@ -12,6 +12,10 @@ import { Label, NumericInput, Switch, TextInput } from "jimu-ui";
 import { type IMConfig } from "../config";
 import AgriPopupSettingPanel from "./agri-popup-setting";
 import AgriAccessSettingPanel from "./agri-access-setting";
+import {
+  normalizeAgriServiceUrls,
+  type AgriServiceUrls,
+} from "../shared/agri-service-urls";
 
 /** jimu-core re-exports seamless-immutable as a namespace; cast for callable use. */
 const Imm = Immutable as unknown as <T>(val: T) => any;
@@ -54,7 +58,7 @@ export default class Setting extends React.PureComponent<
     return (
       this.props.config ??
       Imm({
-        leftPanelWidthPercent: 25,
+        leftPanelWidthPercent: 26,
         bottomRowFraction: 38,
         indicator: {
           useApiDataSource: false,
@@ -104,6 +108,30 @@ export default class Setting extends React.PureComponent<
     });
   }
 
+  private readServiceUrlsPlain(): Partial<AgriServiceUrls> {
+    const raw = (this.ensureConfig() as any).serviceUrls;
+    if (!raw) return {};
+    if (typeof raw.asMutable === "function") {
+      return raw.asMutable({ deep: true }) as Partial<AgriServiceUrls>;
+    }
+    return { ...(raw as Partial<AgriServiceUrls>) };
+  }
+
+  private serviceUrlValue(key: keyof AgriServiceUrls): string {
+    const fromConfig = this.readServiceUrlsPlain()[key];
+    return String(fromConfig ?? "").trim();
+  }
+
+  private mergeServiceUrl(key: keyof AgriServiceUrls, raw: string): void {
+    const next = { ...this.readServiceUrlsPlain() };
+    const value = String(raw ?? "").trim();
+    if (value) next[key] = value;
+    else delete next[key];
+    this.updateConfig({
+      serviceUrls: Object.keys(next).length ? Imm(next) : undefined,
+    });
+  }
+
   private toPlainArray(value: unknown): unknown[] {
     if (!value) return [];
     if (Array.isArray(value)) return value;
@@ -148,6 +176,22 @@ export default class Setting extends React.PureComponent<
   render() {
     const cfg = this.ensureConfig();
     const indicator = (cfg as any).indicator || Imm({});
+    const defaultUrls = normalizeAgriServiceUrls();
+    const serviceUrlFields: Array<{
+      key: keyof AgriServiceUrls;
+      label: string;
+    }> = [
+      { key: "portalOrigin", label: "Portal origin" },
+      { key: "portalUrl", label: "Portal URL" },
+      { key: "arcgisServer", label: "ArcGIS Server base" },
+      { key: "tableDataUrl", label: "Agri_table_data URL" },
+      { key: "vegetationIndicesUrl", label: "Vegetation indices URL" },
+      { key: "polygonApiBaseUrl", label: "Polygon API base URL" },
+      { key: "adminRegionsUrl", label: "Admin regions URL" },
+      { key: "adminDistrictsUrl", label: "Admin districts URL" },
+      { key: "reserveLandUrl", label: "Reserve land URL" },
+      { key: "unusedLandUrl", label: "Unused land URL" },
+    ];
     const allSources = this.toPlainArray(this.props.useDataSources) as UseDataSource[];
     const webMapId = String((cfg as any).webMapDataSourceId || "");
     const webMapSource = allSources.find((source) => source.dataSourceId === webMapId);
@@ -210,7 +254,7 @@ export default class Setting extends React.PureComponent<
             min={18}
             max={45}
             size="sm"
-            value={cfg.leftPanelWidthPercent || 25}
+            value={cfg.leftPanelWidthPercent || 26}
             onAcceptValue={(value) =>
               this.updateConfig({ leftPanelWidthPercent: value })
             }
@@ -230,6 +274,34 @@ export default class Setting extends React.PureComponent<
               this.updateConfig({ bottomRowFraction: value })
             }
           />
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>
+            Service URLs (optional overrides)
+          </div>
+          <p style={{ marginBottom: 10, fontSize: 12, color: "#5b6b7a" }}>
+            Leave empty to use production defaults (sgm.uzspace.uz).
+          </p>
+          {serviceUrlFields.map(({ key, label }) => (
+            <div key={key} style={{ marginBottom: 10 }}>
+              <Label style={{ display: "block", marginBottom: 6 }}>
+                {label}
+              </Label>
+              <TextInput
+                size="sm"
+                value={this.serviceUrlValue(key)}
+                placeholder={defaultUrls[key]}
+                onAcceptValue={(value) => this.mergeServiceUrl(key, value)}
+                onBlur={(e) =>
+                  this.mergeServiceUrl(
+                    key,
+                    (e.target as HTMLInputElement).value,
+                  )
+                }
+              />
+            </div>
+          ))}
         </div>
 
         <AgriPopupSettingPanel {...this.props} />

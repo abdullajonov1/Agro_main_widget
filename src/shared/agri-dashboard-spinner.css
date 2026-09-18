@@ -1,19 +1,29 @@
+/* Same hollow morph as agri-chart-loader (other cards) — inset ring, not solid fill. */
+.agri-dashboard-spinner-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: none;
+  outline: none;
+  background: transparent;
+}
+
 .agri-dashboard-spinner {
-  --loader-inset: 28px;
   --loader-color: #3b82f6;
+  --loader-inset: 35px;
   display: block;
-  width: 52px;
-  height: 52px;
+  width: 65px;
+  height: 65px;
   aspect-ratio: 1;
   position: relative;
   color: var(--loader-color);
   flex-shrink: 0;
-}
-
-.agri-dashboard-spinner--compact {
-  --loader-inset: 22px;
-  width: 40px;
-  height: 40px;
+  border: none;
+  outline: none;
+  background: transparent;
+  transform-origin: center center;
 }
 
 .agri-dashboard-spinner::before,
@@ -21,6 +31,7 @@
   content: "";
   position: absolute;
   border-radius: 50px;
+  background: transparent;
   box-shadow: 0 0 0 3px inset var(--loader-color);
   animation: agri-dashboard-loader-l4 2.5s infinite;
 }
@@ -64,6 +75,11 @@
   }
 }
 
+.agri-v11-regional-stats-loading-container .agri-dashboard-spinner-wrap,
+.land-category-loading-container .agri-dashboard-spinner-wrap,
+.kadastr-status-loading-container .agri-dashboard-spinner-wrap,
+.construction-years-no-data .agri-dashboard-spinner-wrap,
+.loading-indicator .agri-dashboard-spinner-wrap,
 .agri-v11-regional-stats-loading-container .agri-dashboard-spinner,
 .land-category-loading-container .agri-dashboard-spinner,
 .kadastr-status-loading-container .agri-dashboard-spinner,
@@ -75,6 +91,16 @@
 .construction-years-no-data .agri-dashboard-loader,
 .loading-indicator .agri-dashboard-loader {
   margin: 0 auto;
+}
+
+.loading-indicator .agri-dashboard-spinner-wrap,
+.loading-indicator .agri-dashboard-spinner-wrap:focus,
+.loading-indicator .agri-dashboard-spinner-wrap:focus-visible,
+.loading-indicator .agri-dashboard-spinner,
+.loading-indicator .agri-dashboard-spinner:focus,
+.loading-indicator .agri-dashboard-spinner:focus-visible {
+  outline: none !important;
+  border: none !important;
 }
 
 .agri-v11-regional-modern-loader,

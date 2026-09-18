@@ -3,9 +3,7 @@ import {
   loadArcGISJSAPIModules,
   SessionManager,
 } from "jimu-core";
-
-/** Same logout flow as eco-monitoring HomeHeader / Fire Portal logout.tsx */
-const SGM_PORTAL_ORIGIN = "https://sgm.uzspace.uz";
+import { getAgriServiceUrls } from "./agri-service-urls";
 
 function trimPortalRestSuffix(url: string): string {
   return String(url || "")
@@ -40,7 +38,11 @@ function getPortalBaseUrlLogout(): string {
       ?.portalUrl || "";
   if (fromConfig) return trimPortalRestSuffix(String(fromConfig));
 
-  return `${SGM_PORTAL_ORIGIN}/portal`;
+  return getAgriServiceUrls().portalUrl.replace(/\/$/, "");
+}
+
+function getPortalOriginLogout(): string {
+  return getAgriServiceUrls().portalOrigin.replace(/\/$/, "");
 }
 
 function getOAuthClientIdLogout(): string {
@@ -87,14 +89,16 @@ function buildSgmPortalExperienceReauthorizeUrl(opts?: {
     fromRaw = window.location.href.split("#")[0];
   }
 
+  const portalOrigin = getPortalOriginLogout();
+  const portalUrl = getAgriServiceUrls().portalUrl.replace(/\/$/, "");
   const clientId = getOAuthClientIdLogout();
   const innerUrl = new URL(
-    `${SGM_PORTAL_ORIGIN}/portal/apps/experiencebuilder/jimu-core/oauth-callback.html`,
+    `${portalOrigin}/portal/apps/experiencebuilder/jimu-core/oauth-callback.html`,
   );
   innerUrl.searchParams.set("clientId", clientId);
   innerUrl.searchParams.set(
     "portal",
-    `${SGM_PORTAL_ORIGIN}/portal/sharing/rest/`,
+    `${portalUrl}/sharing/rest/`,
   );
   innerUrl.searchParams.set("popup", "false");
   innerUrl.searchParams.set("isInPortal", "true");
@@ -104,7 +108,7 @@ function buildSgmPortalExperienceReauthorizeUrl(opts?: {
   innerUrl.searchParams.set("fromUrl", fromRaw);
 
   const authorizeUrl = new URL(
-    `${SGM_PORTAL_ORIGIN}/portal/sharing/rest/oauth2/authorize`,
+    `${portalUrl}/sharing/rest/oauth2/authorize`,
   );
   authorizeUrl.searchParams.set("client_id", clientId);
   authorizeUrl.searchParams.set("response_type", "token");
@@ -142,13 +146,15 @@ function replaceTopOrSelf(url: string): void {
 }
 
 export async function logoutFromAccount(): Promise<void> {
+  const failures: string[] = [];
+
   try {
     const [IdentityManager] = await loadArcGISJSAPIModules([
       "esri/identity/IdentityManager",
     ]);
     IdentityManager.destroyCredentials();
   } catch {
-    /* ignore */
+    failures.push("IdentityManager.destroyCredentials");
   }
 
   try {
@@ -158,19 +164,19 @@ export async function logoutFromAccount(): Promise<void> {
     localStorage.removeItem("esriJSAPIOAuthData");
     localStorage.removeItem("arcgis_auth_origin");
   } catch {
-    /* ignore */
+    failures.push("localStorage.removeItem");
   }
 
   try {
     sessionStorage.clear();
   } catch {
-    /* ignore */
+    failures.push("sessionStorage.clear");
   }
 
   try {
     SessionManager.getInstance().signOut();
   } catch {
-    /* ignore */
+    failures.push("SessionManager.signOut");
   }
 
   try {
@@ -184,11 +190,29 @@ export async function logoutFromAccount(): Promise<void> {
     }
     extra.forEach((k) => localStorage.removeItem(k));
   } catch {
-    /* ignore */
+    failures.push("localStorage.esriSweep");
   }
 
-  stripCookiesSgm();
+  try {
+    stripCookiesSgm();
+  } catch {
+    failures.push("stripCookies");
+  }
 
+  if (failures.length) {
+    try {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[AgriLogout] local cleanup incomplete — continuing portal sign-out",
+        failures,
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Portal OAuth sign-out is the authoritative session kill even if local
+  // cleanup partially failed (private browsing / storage throws).
   const afterSignOut = buildSgmPortalExperienceReauthorizeUrl({
     forceLogin: true,
   });

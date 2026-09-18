@@ -20,8 +20,8 @@ import basemapIcon from "./assets/basemap.svg";
 import {
   readAgriAdminBordersVisible,
   setAgriAdminBordersVisible,
-} from "../embedded/shared/agri-admin-boundary-layer";
-import { looksLikeRegionYearLayerHaystack } from "../embedded/shared/feature-layer-data";
+} from "../gis/agri-admin-boundary-layer";
+import { looksLikeRegionYearLayerHaystack } from "../gis/feature-layer-data";
 
 interface Props {
   mapWidgetId: string;
@@ -129,6 +129,15 @@ function getItemId(dataSource: any): string {
 }
 
 export default function EmbeddedAgriMap(props: Props) {
+  const {
+    mapWidgetId,
+    webMapDataSourceId,
+    webMapUseDataSource,
+    featureUseDataSources,
+    onViewReady,
+    onLoadingChange,
+    onError,
+  } = props;
   const [basemapMenuOpen, setBasemapMenuOpen] = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [isDarkTheme, setIsDarkTheme] = React.useState(resolveInitialDarkTheme);
@@ -142,7 +151,7 @@ export default function EmbeddedAgriMap(props: Props) {
   const [language, setLanguage] = React.useState<MapLanguage>(() => {
     try {
       const fromUrl = new URLSearchParams(window.location.search).get("lang");
-      const fromStorage = localStorage.getItem("app_lang") || localStorage.getItem("evapo_app_lang");
+      const fromStorage = localStorage.getItem("app_lang") || localStorage.getItem("agri_app_lang");
       return normalizeMapLanguage(fromUrl || fromStorage);
     } catch {
       return "uz_lat";
@@ -168,18 +177,18 @@ export default function EmbeddedAgriMap(props: Props) {
     return () => root.classList.remove("agri-basemap-menu-open");
   }, [basemapMenuOpen]);
   const firstFeatureDataSourceId = String(
-    props.featureUseDataSources?.[0]?.dataSourceId || "",
+    featureUseDataSources?.[0]?.dataSourceId || "",
   );
   const firstFeatureRootDataSourceId = String(
-    props.featureUseDataSources?.[0]?.rootDataSourceId || "",
+    featureUseDataSources?.[0]?.rootDataSourceId || "",
   );
   const effectiveRootDataSourceId = String(
-    props.webMapDataSourceId ||
+    webMapDataSourceId ||
       firstFeatureRootDataSourceId ||
       firstFeatureDataSourceId.split("-")[0] ||
       "",
   );
-  const effectiveRootUseDataSource = props.webMapUseDataSource ||
+  const effectiveRootUseDataSource = webMapUseDataSource ||
     (effectiveRootDataSourceId
       ? {
           dataSourceId: effectiveRootDataSourceId,
@@ -343,6 +352,15 @@ export default function EmbeddedAgriMap(props: Props) {
     void setAgriAdminBordersVisible(viewRef.current, next);
   }, [bordersVisible]);
 
+  const onViewReadyRef = React.useRef(onViewReady);
+  const onLoadingChangeRef = React.useRef(onLoadingChange);
+  const onErrorRef = React.useRef(onError);
+  React.useEffect(() => {
+    onViewReadyRef.current = onViewReady;
+    onLoadingChangeRef.current = onLoadingChange;
+    onErrorRef.current = onError;
+  }, [onViewReady, onLoadingChange, onError]);
+
   React.useEffect(() => {
     let disposed = false;
     let view: __esri.MapView | null = null;
@@ -351,7 +369,7 @@ export default function EmbeddedAgriMap(props: Props) {
 
     const initialize = async (): Promise<void> => {
       if (!containerRef.current) return;
-      props.onLoadingChange?.(true);
+      onLoadingChangeRef.current?.(true);
       try {
         const manager = MapViewManager.getInstance();
         const ds = rootDataSource || (effectiveRootDataSourceId
@@ -434,7 +452,7 @@ export default function EmbeddedAgriMap(props: Props) {
         }
 
         const jimuMapView = await manager.createJimuMapView({
-          mapWidgetId: props.mapWidgetId,
+          mapWidgetId,
           dataSourceId: effectiveRootDataSourceId,
           view,
           isActive: true,
@@ -442,16 +460,27 @@ export default function EmbeddedAgriMap(props: Props) {
           mapViewManager: manager,
           useUrlHashLayersVisibility: false,
         });
+        if (disposed) {
+          try {
+            MapViewManager.getInstance().destroyJimuMapView(jimuMapView.id);
+          } catch {
+            /* noop */
+          }
+          try { view.destroy(); } catch { /* noop */ }
+          return;
+        }
         jimuMapViewId = jimuMapView.id;
         jimuMapViewRef.current = jimuMapView;
         // The map is usable as soon as the view is ready. Hidden/background
         // layer updates must not keep the whole dashboard behind a loader.
-        props.onLoadingChange?.(false);
-        props.onViewReady?.(jimuMapView);
+        onLoadingChangeRef.current?.(false);
+        onViewReadyRef.current?.(jimuMapView);
       } catch (error) {
         if (!disposed) {
-          props.onLoadingChange?.(false);
-          props.onError?.(error instanceof Error ? error.message : "Xaritani yuklab bo'lmadi");
+          onLoadingChangeRef.current?.(false);
+          onErrorRef.current?.(
+            error instanceof Error ? error.message : "Xaritani yuklab bo'lmadi",
+          );
         }
       }
     };
@@ -466,7 +495,9 @@ export default function EmbeddedAgriMap(props: Props) {
       mapRef.current = null;
       try { view?.destroy(); } catch { /* noop */ }
     };
-  }, [props.mapWidgetId, effectiveRootDataSourceId, rootDataSource]);
+    // Intentionally omit onLoadingChange/onViewReady/onError — parent passes
+    // inline lambdas; including them remounts the map every setState (infinite loop).
+  }, [mapWidgetId, effectiveRootDataSourceId, rootDataSource]);
 
   return (
     <React.Fragment>
@@ -476,7 +507,7 @@ export default function EmbeddedAgriMap(props: Props) {
         onPointerDownCapture={() => {
           window.dispatchEvent(
             new CustomEvent("agri-main:map-settings-request", {
-              detail: { widgetId: props.mapWidgetId.replace(/-embedded-map$/, "") },
+              detail: { widgetId: mapWidgetId.replace(/-embedded-map$/, "") },
             }),
           );
         }}
@@ -611,7 +642,7 @@ export default function EmbeddedAgriMap(props: Props) {
         <div style={{ display: "none" }} aria-hidden="true">
           <DataSourceComponent
             useDataSource={effectiveRootUseDataSource}
-            widgetId={props.mapWidgetId}
+            widgetId={mapWidgetId}
             onDataSourceCreated={(dataSource: DataSource) => setRootDataSource(dataSource)}
           />
         </div>

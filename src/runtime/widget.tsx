@@ -1,4 +1,5 @@
 /** @jsx jsx */
+/** @jsxFrag React.Fragment */
 import {
   AppMode,
   Immutable,
@@ -8,15 +9,18 @@ import {
   getAppStore,
   type AllWidgetProps,
 } from "jimu-core";
-import AgriLocalization from "../embedded/AgriLocalization/runtime/widget";
-import AgriRegion10 from "../embedded/AgriRegion10/runtime/widget";
-import AgriDateIndexIndicator from "../embedded/AgriDateIndexIndicator/runtime/widget";
-import AgriPie10 from "../embedded/AgriPie10/runtime/widget";
-import AgriGraff10 from "../embedded/AgriGraff10/runtime/widget";
-import AgriBar10 from "../embedded/AgriBar10/runtime/widget";
-import AgriPopup from "../embedded/AgriPopup/runtime/widget";
-import AgriChartLoader from "../shared/AgriChartLoader";
+import LocalizationPanel from "../filter/LocalizationPanel";
+import RegionPanel from "../panels/RegionPanel";
+import PiePanel from "../panels/PiePanel";
+import BarPanel from "../panels/BarPanel";
+import DateIndexPanel from "../panels/DateIndexPanel/runtime/widget";
+import {
+  LazyAgriGraff10,
+  LazyAgriPopup,
+  LazyPanelSuspense,
+} from "./lazy-panels";
 import { agriNoDataLabel } from "../shared/agriNoDataLabel";
+import AgriChartLoader from "../shared/AgriChartLoader";
 import { TriangleAlert } from "lucide-react";
 import EmbeddedAgriMap from "./embedded-agri-map";
 import AgriMapIndicatorDrawer, {
@@ -27,8 +31,22 @@ import {
   type IMConfig,
   type IndicatorChildConfig,
 } from "../config";
+// Panel CSS before dashboard so agri-dashboard.css layout rules win (donut stays circular).
+import "../panels/PiePanel/runtime/AgriPie.css";
+import "../panels/BarPanel/runtime/AgriBar.css";
 import "./agri-dashboard.css";
 import { setAccessConfig } from "../shared/agri-access-config";
+import { setAgriServiceUrls } from "../shared/agri-service-urls";
+import { clearDashboardCaches } from "../data/agri-dashboard-cache-clear";
+import {
+  MAP_VIEW_WATCH_INTERVAL_MS,
+  MAP_VIEW_WATCH_MAX_ATTEMPTS,
+  isMapViewReady,
+  resolveJimuMapView,
+} from "../shared/map-connection-service";
+import { agroV5Log } from "../gis/agri-debug-log";
+
+const mountedAgriDashboardIds = new Set<string>();
 
 type ChildSuffix =
   | "localization"
@@ -92,6 +110,8 @@ export default class AgriDashboard extends React.PureComponent<
     null;
   private watchedMapView: unknown = null;
   private embeddedMapReady = false;
+  private mapViewWatchAttempts = 0;
+  private lastMapWatchWidgetId = "";
 
   state: AgriDashboardState = {
     indicatorsOpen: true,
@@ -105,6 +125,22 @@ export default class AgriDashboard extends React.PureComponent<
     mapPopupPinned: false,
   };
 
+  constructor(props: AllWidgetProps<IMConfig>) {
+    super(props);
+    // Apply before first child render/mount — must not live in render().
+    this.syncConfigSideEffects();
+  }
+
+  /**
+   * Access + service URL module state. Idempotent; safe on every config change.
+   * Kept out of render() (React purity) but applied in constructor so the first
+   * paint of Localization/Graff already sees the correct access WHERE.
+   */
+  private syncConfigSideEffects = (): void => {
+    setAccessConfig(this.props.config?.accessConfig);
+    setAgriServiceUrls((this.props.config as any)?.serviceUrls);
+  };
+
   private isBuilderDesignMode(): boolean {
     return getAppStore().getState().appRuntimeInfo?.appMode === AppMode.Design;
   }
@@ -114,7 +150,7 @@ export default class AgriDashboard extends React.PureComponent<
       const fromUrl = new URLSearchParams(window.location.search).get("lang");
       const fromStorage =
         localStorage.getItem("app_lang") ||
-        localStorage.getItem("evapo_app_lang");
+        localStorage.getItem("agri_app_lang");
       return String(fromUrl || fromStorage || "uz_lat");
     } catch {
       return "uz_lat";
@@ -122,9 +158,20 @@ export default class AgriDashboard extends React.PureComponent<
   }
 
   componentDidMount(): void {
+    // Re-apply in case Builder mutated config between construct and mount.
+    this.syncConfigSideEffects();
     // The Builder settings surface only needs the lightweight render preview.
     // Do not start map retries, document-wide observers or portal layout work.
     if (this.isBuilderDesignMode()) return;
+
+    if (mountedAgriDashboardIds.size > 0) {
+      agroV5Log("AgriDashboard:single-instance-warn", {
+        existingIds: Array.from(mountedAgriDashboardIds),
+        widgetId: this.props.id,
+      });
+    }
+    mountedAgriDashboardIds.add(String(this.props.id));
+
     document.documentElement.classList.add("agri-dashboard-active");
     this.setupMapSlotObserver();
     this.scheduleMapSlotLayout(true);
@@ -153,6 +200,9 @@ export default class AgriDashboard extends React.PureComponent<
     prevProps: AllWidgetProps<IMConfig>,
     prevState: AgriDashboardState,
   ): void {
+    if (prevProps.config !== this.props.config) {
+      this.syncConfigSideEffects();
+    }
     if (this.isBuilderDesignMode()) return;
     this.ensurePortalHost();
     this.ensureLayoutObservers();
@@ -175,17 +225,10 @@ export default class AgriDashboard extends React.PureComponent<
       this.scheduleMapSlotLayout(true);
     }
 
-    // Only re-bind map watchers when map id or loading-related state needs it —
-    // calling every update with no view schedules a 300ms retry forever and
-    // can cascade with portal Host DOM mutations.
-    const prevMap = String(
-      (prevProps.useMapWidgetIds as any)?.[0] ||
-        (prevProps.useMapWidgetIds as any)?.get?.(0) ||
-        "",
-    );
+    // Only re-bind map watchers when the active map id or loading state changes.
     const nextMap = String(this.getActiveMapWidgetId() || "");
     if (
-      prevMap !== nextMap ||
+      nextMap !== this.lastMapWatchWidgetId ||
       prevState.mapLoading !== this.state.mapLoading
     ) {
       this.scheduleMapLoadingWatchers();
@@ -233,6 +276,8 @@ export default class AgriDashboard extends React.PureComponent<
   };
 
   componentWillUnmount(): void {
+    mountedAgriDashboardIds.delete(String(this.props.id));
+
     if (this.indicatorAnimTimer) {
       clearTimeout(this.indicatorAnimTimer);
       this.indicatorAnimTimer = null;
@@ -264,6 +309,7 @@ export default class AgriDashboard extends React.PureComponent<
     this.detachMapLoadingWatchers();
     this.clearIndicatorOverlayLayout();
     this.removePortalHost();
+    clearDashboardCaches();
   }
 
   private handleMapSurfaceLoading = (event: Event): void => {
@@ -274,16 +320,19 @@ export default class AgriDashboard extends React.PureComponent<
       this.mapSurfaceLoadingSafetyTimer = null;
     }
     if (loading) {
-      // ArcGIS may occasionally omit the final redraw callback when a
-      // polygon selection and a district-clear happen together. The map is
-      // already usable at that point, so never leave the blocking overlay
-      // mounted indefinitely.
+      // Vegetation TIFF can take longer than map redraw; keep overlay up to
+      // the export-image client timeout (~25s), otherwise 12s for map ops.
+      const reason = String(detail.reason || "");
+      const safetyMs =
+        reason === "vegetation-raster" || reason === "vegetation-raster-cancel"
+          ? 28000
+          : 12000;
       this.mapSurfaceLoadingSafetyTimer = setTimeout(() => {
         this.mapSurfaceLoadingSafetyTimer = null;
         if (this.state.mapSurfaceLoading) {
           this.setState({ mapSurfaceLoading: false });
         }
-      }, 12000);
+      }, safetyMs);
     }
     if (loading && this.state.mapNoData) {
       this.setState({ mapSurfaceLoading: true, mapNoData: false });
@@ -551,9 +600,10 @@ export default class AgriDashboard extends React.PureComponent<
   }
 
   private getLeftPanelWidth(): string {
-    const raw = Number(this.props.config?.leftPanelWidthPercent ?? 25);
-    const pct = Number.isFinite(raw) ? Math.min(45, Math.max(18, raw)) : 25;
-    return `${pct}%`;
+    const raw = Number(this.props.config?.leftPanelWidthPercent ?? 26);
+    const pct = Number.isFinite(raw) ? Math.min(45, Math.max(18, raw)) : 26;
+    // Slight bump from base 25%; kept smaller than the earlier +1cm enlarge.
+    return `calc(${pct}% + 0.35cm)`;
   }
 
   private getRowFrValues(): { top: number; bottom: number } {
@@ -569,19 +619,7 @@ export default class AgriDashboard extends React.PureComponent<
   }
 
   private getActiveJimuMapView(): any | null {
-    const mapWidgetId = this.getActiveMapWidgetId();
-    if (!mapWidgetId) return null;
-
-    try {
-      const { MapViewManager } = require("jimu-arcgis") as typeof import("jimu-arcgis");
-      const group = MapViewManager.getInstance().getJimuMapViewGroup(mapWidgetId);
-      const active = group?.getActiveJimuMapView?.();
-      if (active?.view) return active;
-      const all = group?.getAllJimuMapViews?.() || [];
-      return all.find((jmv: any) => !!jmv?.view) || null;
-    } catch {
-      return null;
-    }
+    return resolveJimuMapView(this.getActiveMapWidgetId());
   }
 
   private detachMapLoadingWatchers(): void {
@@ -607,7 +645,7 @@ export default class AgriDashboard extends React.PureComponent<
     const view = jimuMapView?.view;
     if (!view) return !this.embeddedMapReady;
     // Initial boot only — ignore interactive zoom/pan redraws (`updating`).
-    return view.ready !== true;
+    return !isMapViewReady(jimuMapView);
   }
 
   private updateMapLoadingState = (): void => {
@@ -618,18 +656,33 @@ export default class AgriDashboard extends React.PureComponent<
     const mapWidgetId = this.getActiveMapWidgetId();
     if (!mapWidgetId) {
       this.detachMapLoadingWatchers();
+      this.mapViewWatchAttempts = 0;
+      this.lastMapWatchWidgetId = "";
       this.setMapLoading(false);
       return;
+    }
+
+    if (mapWidgetId !== this.lastMapWatchWidgetId) {
+      this.mapViewWatchAttempts = 0;
+      this.lastMapWatchWidgetId = mapWidgetId;
     }
 
     const jimuMapView = this.getActiveJimuMapView();
     const view = jimuMapView?.view as any;
     if (!view) {
+      if (this.mapViewWatchAttempts >= MAP_VIEW_WATCH_MAX_ATTEMPTS) {
+        this.detachMapLoadingWatchers();
+        this.setMapLoading(false);
+        return;
+      }
+      this.mapViewWatchAttempts += 1;
       this.detachMapLoadingWatchers();
       this.setMapLoading(true);
-      this.scheduleMapLoadingWatchers(300);
+      this.scheduleMapLoadingWatchers(MAP_VIEW_WATCH_INTERVAL_MS);
       return;
     }
+
+    this.mapViewWatchAttempts = 0;
 
     if (this.watchedMapView === view) {
       this.updateMapLoadingState();
@@ -868,7 +921,7 @@ export default class AgriDashboard extends React.PureComponent<
     );
     const cardWidth = this.readDashboardCssPx(
       "--agri-dashboard-date-index-width",
-      168,
+      210,
     );
     const navSize = this.readDashboardCssPx(
       "--agri-dashboard-date-index-nav-size",
@@ -996,7 +1049,6 @@ export default class AgriDashboard extends React.PureComponent<
   }
 
   render() {
-    setAccessConfig(this.props.config?.accessConfig);
     const baseConfig = this.toPlainConfig();
     const indicatorConfig = this.getIndicatorConfig(baseConfig);
     const popupConfig = this.getPopupConfig(baseConfig);
@@ -1096,7 +1148,7 @@ export default class AgriDashboard extends React.PureComponent<
             className="agri-dashboard-date-index-overlay agri-dashboard-indicator-overlay--compact"
             aria-label="Selected date and index indicator"
           >
-            <AgriDateIndexIndicator
+            <DateIndexPanel
               {...this.childProps("date-index", baseConfig)}
             />
           </div>,
@@ -1110,7 +1162,9 @@ export default class AgriDashboard extends React.PureComponent<
             className="agri-dashboard-agri-host"
             aria-label="Polygon attribute popup"
           >
-            <AgriPopup {...this.childProps("popup", popupConfig)} />
+            <LazyPanelSuspense>
+              <LazyAgriPopup {...this.childProps("popup", popupConfig)} />
+            </LazyPanelSuspense>
           </div>,
           portalTarget,
         )
@@ -1131,7 +1185,7 @@ export default class AgriDashboard extends React.PureComponent<
         }
       >
         <section className="agri-dashboard-header" aria-label="Localization">
-          <AgriLocalization {...this.childProps("localization", baseConfig)} />
+          <LocalizationPanel {...this.childProps("localization", baseConfig)} />
         </section>
 
         <div
@@ -1146,7 +1200,7 @@ export default class AgriDashboard extends React.PureComponent<
               aria-label="Regional statistics"
             >
               <div className="agri-dashboard-widget-slot">
-                <AgriRegion10 {...this.childProps("region", baseConfig)} />
+                <RegionPanel {...this.childProps("region", baseConfig)} />
               </div>
             </aside>
 
@@ -1183,7 +1237,9 @@ export default class AgriDashboard extends React.PureComponent<
                   this.forceUpdate();
                 }}
                 onLoadingChange={(mapLoading) => {
-                  if (!mapLoading) this.embeddedMapReady = true;
+                  if (!mapLoading) {
+                    this.embeddedMapReady = true;
+                  }
                   this.setMapLoading(mapLoading);
                 }}
                 onError={(mapError) => this.setState({ mapError })}
@@ -1225,13 +1281,17 @@ export default class AgriDashboard extends React.PureComponent<
 
           <div className="agri-dashboard-bottom-row" aria-label="Charts">
             <div className="agri-dashboard-widget-slot">
-              <AgriPie10 {...this.childProps("pie", baseConfig)} />
+              <PiePanel {...this.childProps("pie", baseConfig)} />
             </div>
             <div className="agri-dashboard-widget-slot">
-              <AgriGraff10 {...this.childProps("graff", baseConfig)} />
+              <LazyPanelSuspense>
+                <LazyAgriGraff10
+                  {...this.childProps("graff", baseConfig)}
+                />
+              </LazyPanelSuspense>
             </div>
             <div className="agri-dashboard-widget-slot">
-              <AgriBar10 {...this.childProps("bar", baseConfig)} />
+              <BarPanel {...this.childProps("bar", baseConfig)} />
             </div>
           </div>
         </div>

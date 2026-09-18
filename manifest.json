@@ -1,16 +1,20 @@
 {
   "name": "Agro_widgetV5",
-  "label": "Agro Space Monitoring",
+  "label": "Space Agro Monitoring V6 (dev)",
   "type": "widget",
-  "version": "1.0.0",
+  "version": "6.0.0",
   "exbVersion": "1.16.0",
-  "author": "Custom Developer",
-  "description": "Self-contained Space Agro Monitoring dashboard with embedded AgriLocalization, AgriRegion10, AgriIndicator10, AgriPie10, AgriGraff10, AgriBar10, and AgriPopup (no dependency on standalone Agri3 widgets)",
+  "author": "abdullajonov1",
+  "description": "Self-contained Space Agro Monitoring dashboard with embedded map, Localization, Region, Indicator, Pie, Graff, Bar and Popup panels. Local folder name Agro_widgetV5; publish as Agro_widgetV6.",
   "copyright": "",
   "license": "",
-  "properties": {},
+  "properties": {
+    "supportAutoSize": false
+  },
   "translatedLocales": [
-    "en"
+    "en",
+    "uz",
+    "ru"
   ],
   "defaultSize": {
     "width": 1920,

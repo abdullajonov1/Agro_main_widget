@@ -9,7 +9,7 @@ import { type AllWidgetSettingProps } from "jimu-for-builder";
 import { Option, Select, Switch, TextInput, MultiSelect } from "jimu-ui";
 import { ColorPicker } from "jimu-ui/basic/color-picker";
 import { type AgriPopupConfig, type IMConfig } from "../config";
-import { getQueryableLayer } from "../embedded/shared/feature-layer-data";
+import { getQueryableLayer } from "../gis/feature-layer-data";
 
 /** jimu-core re-exports seamless-immutable as a namespace; cast for callable use. */
 const Imm = Immutable as unknown as <T>(val: T) => any;
@@ -96,14 +96,8 @@ export default class AgriPopupSettingPanel extends React.PureComponent<
     return (
       this.props.config ??
       Imm({
-        enableMinMaxControl: true,
-        enableColorRendererControl: true,
-        enableRegionFilterControl: true,
-        enableLogoutControl: true,
-        selectionPercentage: 10,
-        polygonIdField: "GlobalID",
-        rightPanelWidthPercent: 40,
-        chartType: "bar",
+        leftPanelWidthPercent: 26,
+        bottomRowFraction: 0.42,
         agriPopup: {
           fieldsToShow: [],
           titleField: "",
@@ -117,7 +111,7 @@ export default class AgriPopupSettingPanel extends React.PureComponent<
           chartType: "bar",
           chartTitle: "",
           chartFields: [],
-          chartColor: "#3b82f6",
+          chartColor: "#00a8e8",
         },
       })
     ) as IMConfig;
@@ -470,7 +464,7 @@ export default class AgriPopupSettingPanel extends React.PureComponent<
     const chartType = agri.chartType || "bar";
     const chartTitle = agri.chartTitle || "";
     const chartFields = agri.chartFields || [];
-    const chartColor = agri.chartColor || "#3b82f6";
+    const chartColor = agri.chartColor || "#00a8e8";
 
     return (
       <div

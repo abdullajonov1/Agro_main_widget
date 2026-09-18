@@ -1,9 +1,9 @@
 /** @jsx jsx */
 import { jsx, React, type AllWidgetProps } from "jimu-core";
-import AgriIndicator10 from "../embedded/AgriIndicator10/runtime/widget";
-import AgriIndicatorYield from "../embedded/AgriIndicatorYield/runtime/widget";
-import AgriIndicatorUnusedLand from "../embedded/AgriIndicatorUnusedLand/runtime/widget";
-import AgriIndicatorReserveLand from "../embedded/AgriIndicatorReserveLand/runtime/widget";
+import AgriIndicator10 from "../panels/IndicatorPanel";
+import AgriIndicatorYield from "../panels/IndicatorYieldPanel/runtime/widget";
+import AgriIndicatorUnusedLand from "../panels/IndicatorUnusedLandPanel/runtime/widget";
+import AgriIndicatorReserveLand from "../panels/IndicatorReserveLandPanel/runtime/widget";
 
 export type IndicatorAnimPhase =
   | "collapsed"
