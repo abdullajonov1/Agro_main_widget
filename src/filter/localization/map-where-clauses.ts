@@ -186,6 +186,8 @@ export function assembleLocalizationWhere(opts: {
   /** null = still resolving; string[] = ready (may be empty → 1=0 via join). */
   vhUniqueIds: string[] | null;
   uniqueIdClause: string;
+  /** Exact STIR from header search (`f_inn='…'`). */
+  farmerInnClause?: string;
   buildSpatialJoinWhere: (ids: string[]) => string;
   withAccessWhere: (where: string) => string;
 }): string {
@@ -204,6 +206,10 @@ export function assembleLocalizationWhere(opts: {
 
   if (opts.includeTuri && opts.cropClause) {
     clauses.push(opts.cropClause);
+  }
+
+  if (opts.farmerInnClause) {
+    clauses.push(opts.farmerInnClause);
   }
 
   if (opts.includeVh && opts.vhCategory) {

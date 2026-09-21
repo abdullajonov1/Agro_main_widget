@@ -32,6 +32,8 @@ export type VhBarComputeKeyInput = {
   polygonMode: boolean;
   uniqueid: string;
   filterVhBarByCrop: boolean;
+  /** Exact STIR filter from header search. */
+  farmerInn?: string;
 };
 
 function normalizeNdviStatusKey(raw: string): string {
@@ -160,5 +162,6 @@ export function buildVhBarComputeKey(input: VhBarComputeKeyInput): string {
       input.ndviDateLocked && String(input.ndviDate || "").trim(),
     ),
     filterVhBarByCrop: input.filterVhBarByCrop,
+    farmerInn: String(input.farmerInn || "").trim(),
   });
 }

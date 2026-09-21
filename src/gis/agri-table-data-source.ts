@@ -99,6 +99,29 @@ export async function queryAgriUniqueIdsForWhere(
     return [];
   }
 
+  return pageAgriUniqueIdsForWhere(where);
+}
+
+/**
+ * Always-on uniqueid resolve for an exact STIR (`f_inn`) selection.
+ * Header search selects one farmer — typically tens of parcels, safe to page.
+ */
+export async function queryAgriUniqueIdsForFarmerInn(
+  inn: string,
+  scopeWhere?: string,
+): Promise<string[]> {
+  const cleanInn = String(inn || "").trim();
+  if (!cleanInn) return [];
+  const innClause = `UPPER(f_inn)=UPPER('${escapeAgriValue(cleanInn)}')`;
+  const scope = String(scopeWhere || "").trim();
+  const where =
+    scope && scope !== "1=1" && scope !== "1=0"
+      ? `(${scope}) AND (${innClause})`
+      : innClause;
+  return pageAgriUniqueIdsForWhere(where);
+}
+
+async function pageAgriUniqueIdsForWhere(where: string): Promise<string[]> {
   const clean = String(where ?? "").trim();
   if (!clean || clean === "1=0") return [];
 

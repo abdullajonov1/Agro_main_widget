@@ -59,6 +59,7 @@ import {
   getAgriTableDataLayer,
   getAgriTableDataUrl,
   queryAgriUniqueIdsForWhere,
+  queryAgriUniqueIdsForFarmerInn,
   buildSpatialJoinWhere,
 } from "../../../gis/agri-table-data-source";
 import { getAgriServiceUrls } from "../../../shared/agri-service-urls";
@@ -262,6 +263,11 @@ interface GeoWidgetState extends FilterState {
   polygonMode?: boolean;
   /** Selected polygon id from AgriGraff row; used to keep only one polygon visible. */
   selectedGraffUniqueid?: string;
+  /**
+   * Exact STIR (`f_inn`) from header search — scopes pie / VH / map to that
+   * farmer's parcels (not a single uniqueid).
+   */
+  selectedFarmerInn?: string;
   /**
    * Timestamp of the click/selection that produced selectedGraffUniqueid
    * (from the originating widget, e.g. AgriPopup's pre-await click time) —
@@ -554,6 +560,18 @@ export default class AgriLocalization extends React.PureComponent<
    * district's bar, not only the focused tuman.
    */
   private _vhRegionChartUniqueIds: string[] | null = null;
+  /**
+   * Uniqueids for the header STIR (`selectedFarmerInn`) selection — scopes
+   * MapImage + VH bar the same way VH uniqueids do.
+   */
+  private _farmerMapUniqueIds: string[] | null = null;
+  /** True while applying a header STIR selection (skip geo-echo search clear). */
+  private _farmerSearchApplying = false;
+  /**
+   * Geography before a committed STIR selection — restored when search is
+   * cleared (X) so republic / viloyat / tuman return to the prior scope.
+   */
+  private _preFarmerSearchGeo: { viloyat: string; tuman: string } | null = null;
   /** Bumps on every VH resolve so stale async pages never write the map. */
   private _vhResolveGen = 0;
   /** True after VH-only path already resolved uniqueids for this apply. */
@@ -1365,6 +1383,7 @@ export default class AgriLocalization extends React.PureComponent<
       initialPreselectionProcessed: false,
       polygonMode: false,
       selectedGraffUniqueid: "",
+      selectedFarmerInn: "",
       openToolbarMenu: null,
       selectedIndexInfoKey: null,
       notificationDays: [],
@@ -1409,9 +1428,12 @@ export default class AgriLocalization extends React.PureComponent<
           initialPreselectionProcessed: true,
           selectedGraffUniqueid: "",
           polygonMode: false,
+          selectedFarmerInn: "",
         },
         async () => {
           this._allowClearOnce = true;
+          this._farmerMapUniqueIds = null;
+          this._preFarmerSearchGeo = null;
 
           if (this.state.connectionStatus === "connected") {
             try {
@@ -1735,14 +1757,20 @@ export default class AgriLocalization extends React.PureComponent<
       // Field popup / Graff single-polygon focus is stale once geography moves.
       (updates as any).polygonMode = false;
       (updates as any).selectedGraffUniqueid = "";
-      // Search modal + bottom-table search filter must not survive geo change.
-      (updates as any).graffSearchText = "";
-      (updates as any).graffSearchSuggestions = [];
-      (updates as any).graffSearchShowSuggestions = false;
-      (updates as any).graffSearchLoading = false;
-      if (this._graffSearchDebounceTimer) {
-        clearTimeout(this._graffSearchDebounceTimer);
-        this._graffSearchDebounceTimer = null;
+      // While locking geo from a STIR row, keep farmer search / text.
+      if (!this._farmerSearchApplying) {
+        (updates as any).selectedFarmerInn = "";
+        this._farmerMapUniqueIds = null;
+        this._preFarmerSearchGeo = null;
+        // Search modal + bottom-table search filter must not survive geo change.
+        (updates as any).graffSearchText = "";
+        (updates as any).graffSearchSuggestions = [];
+        (updates as any).graffSearchShowSuggestions = false;
+        (updates as any).graffSearchLoading = false;
+        if (this._graffSearchDebounceTimer) {
+          clearTimeout(this._graffSearchDebounceTimer);
+          this._graffSearchDebounceTimer = null;
+        }
       }
     }
 
@@ -2347,6 +2375,7 @@ export default class AgriLocalization extends React.PureComponent<
       selectedGraffUniqueid,
       selectedGraffUniqueidClickedAt,
       polygonMode,
+      selectedFarmerInn,
     } = this.state;
 
     const primaryLayer =
@@ -2427,6 +2456,7 @@ export default class AgriLocalization extends React.PureComponent<
           ? selectedGraffUniqueidClickedAt || undefined
           : undefined,
         polygonMode: Boolean(polygonMode),
+        farmerInn: String(selectedFarmerInn || "").trim(),
         // First-selected chart scopes the other widget; second only maps.
         filterPieByVh: chartFlags.filterPieByVh,
         filterVhBarByCrop: chartFlags.filterVhBarByCrop,
@@ -4324,11 +4354,12 @@ export default class AgriLocalization extends React.PureComponent<
   };
 
   /**
-   * Graff search modal must work only after viloyat is selected.
-   * Scope is yil + viloyat (+ tuman when set) — no VH/crop/polygon filters.
+   * Graff search modal: year is required. When a viloyat (or tuman) is
+   * selected, STIR search is scoped to the whole viloyat — not the active
+   * district — so other tumans in that region still appear in the list.
    */
   private buildGraffSearchScopeWhere = (): string => {
-    const { yil, tuman } = this.state;
+    const { yil } = this.state;
     if (!yil) return "1=0";
 
     const clauses: string[] = [];
@@ -4336,15 +4367,9 @@ export default class AgriLocalization extends React.PureComponent<
     if (yearClause) clauses.push(yearClause);
 
     const viloyatClause = this.buildViloyatRegionClause();
-    if (!viloyatClause) return "1=0";
-    clauses.push(viloyatClause);
+    if (viloyatClause) clauses.push(viloyatClause);
 
-    if (tuman) {
-      const tumanClause = this.buildTumanDistrictClause();
-      if (tumanClause) clauses.push(tumanClause);
-    }
-
-    return clauses.join(" AND ");
+    return clauses.length ? clauses.join(" AND ") : "1=0";
   };
 
   private getGraffSearchFieldLabel = (
@@ -4496,17 +4521,42 @@ export default class AgriLocalization extends React.PureComponent<
           if (!attrs.f_name && attrs[farmerField] != null) {
             attrs.f_name = String(attrs[farmerField]);
           }
+          if (!attrs.viloyat && attrs[viloyatField] != null) {
+            attrs.viloyat = String(attrs[viloyatField]);
+          }
+          if (!attrs.tuman && attrs[tumanField] != null) {
+            attrs.tuman = String(attrs[tumanField]);
+          }
           return attrs;
         })
         .filter((record) => record.f_inn || record.f_name);
 
+      // One row per STIR + viloyat + tuman (avoid repeating every parcel).
+      const seenGeo = new Set<string>();
+      const deduped: GraffSearchRecord[] = [];
+      for (const record of results) {
+        const key = [
+          String(record.f_inn || "").trim().toLowerCase(),
+          String(record.viloyat || record.region || "")
+            .trim()
+            .toLowerCase(),
+          String(record.tuman || record.district || "")
+            .trim()
+            .toLowerCase(),
+        ].join("|");
+        if (seenGeo.has(key)) continue;
+        seenGeo.add(key);
+        deduped.push(record);
+      }
+
       AgriLocalization.agriLog("graffSearch:results", {
-        count: results.length,
+        count: deduped.length,
+        rawCount: results.length,
       });
 
       if (isCurrent()) {
         this.setState({
-          graffSearchSuggestions: results,
+          graffSearchSuggestions: deduped,
           graffSearchShowSuggestions: true,
           graffSearchLoading: false,
         });
@@ -4530,26 +4580,66 @@ export default class AgriLocalization extends React.PureComponent<
   ) => {
     const nextValue = String(event?.target?.value ?? "");
     const trimmed = nextValue.trim();
+    const selectedInn = String(this.state.selectedFarmerInn || "").trim();
+    const leavingCommittedSelection =
+      !!selectedInn && trimmed !== selectedInn;
 
-    this.setState({ graffSearchText: nextValue });
+    if (leavingCommittedSelection) {
+      // Editing away from a committed STIR restores prior geography first.
+      const restore = this._preFarmerSearchGeo;
+      this._preFarmerSearchGeo = null;
+      this._farmerMapUniqueIds = null;
+      this.setState(
+        {
+          graffSearchText: nextValue,
+          selectedFarmerInn: "",
+          ...(restore != null
+            ? {
+                viloyat: String(restore.viloyat || ""),
+                tuman: String(restore.tuman || ""),
+              }
+            : {}),
+        },
+        () => {
+          this.emitGraffTableSearchClear();
+          if (this.state.connectionStatus === "connected") {
+            const v = String(this.state.viloyat || "");
+            const t = String(this.state.tuman || "");
+            const zoomRequest = !v
+              ? ({ mode: "home", reason: "reset" } as const)
+              : t
+                ? ({ mode: "selection", reason: "district" } as const)
+                : ({ mode: "selection", reason: "region" } as const);
+            this.broadcastFilterState();
+            void this.applyMapFiltersOptimized(zoomRequest);
+          }
+        },
+      );
+    } else {
+      this.setState({ graffSearchText: nextValue });
+    }
 
     if (this._graffSearchDebounceTimer) {
       clearTimeout(this._graffSearchDebounceTimer);
     }
 
     if (!trimmed) {
-      this.setState({
-        graffSearchSuggestions: [],
-        graffSearchShowSuggestions: false,
-        graffSearchLoading: false,
-      });
-      this.emitGraffTableSearchClear();
+      // Emptying the input after a committed STIR selection restores prior geo.
+      // (Already handled above when leavingCommittedSelection cleared farmer.)
+      if (!leavingCommittedSelection && this._preFarmerSearchGeo) {
+        this.clearFarmerSearchAndRestoreGeo();
+      } else {
+        this.setState({
+          graffSearchSuggestions: [],
+          graffSearchShowSuggestions: false,
+          graffSearchLoading: false,
+        });
+      }
       return;
     }
 
-    // Don't run search (and don't open modal) until viloyat is selected.
-    const effectiveViloyat = this.getEffectiveViloyat();
-    if (!effectiveViloyat) {
+    // Year is enough — republic-wide STIR search is allowed without viloyat.
+    if (!this.state.yil) {
       this.setState({
         graffSearchSuggestions: [],
         graffSearchShowSuggestions: false,
@@ -4563,39 +4653,209 @@ export default class AgriLocalization extends React.PureComponent<
       graffSearchLoading: true,
     });
 
+    // Typing only drives the dropdown suggestions — do NOT filter Jadval /
+    // zoom the map until the user picks a row from that list.
     this._graffSearchDebounceTimer = setTimeout(() => {
-      this.emitGraffTableSearchChanged(trimmed);
       this.runGraffAutoComplete(trimmed);
     }, 300);
   };
 
-  private handleGraffSearchClear = () => {
+  private handleGraffSearchFocus = (): void => {
+    const trimmed = String(this.state.graffSearchText || "").trim();
+    if (!trimmed || !this.state.yil) return;
+
+    // Click-away only hides the list; keep suggestions and reopen on focus.
+    if (this.state.graffSearchSuggestions.length > 0) {
+      this.setState({ graffSearchShowSuggestions: true });
+      return;
+    }
+
+    this.setState({
+      graffSearchShowSuggestions: true,
+      graffSearchLoading: true,
+    });
+    void this.runGraffAutoComplete(trimmed);
+  };
+
+  /**
+   * Clear STIR selection and restore the geography that was active before
+   * the farmer search row was chosen (republic / viloyat / tuman).
+   */
+  private clearFarmerSearchAndRestoreGeo = (): void => {
     if (this._graffSearchDebounceTimer) {
       clearTimeout(this._graffSearchDebounceTimer);
       this._graffSearchDebounceTimer = null;
     }
 
-    this.setState({
-      graffSearchText: "",
-      graffSearchSuggestions: [],
-      graffSearchShowSuggestions: false,
-      graffSearchLoading: false,
-    });
-    this.emitGraffTableSearchClear();
+    const hadFarmer = !!String(this.state.selectedFarmerInn || "").trim();
+    const restore = this._preFarmerSearchGeo;
+    this._preFarmerSearchGeo = null;
+    this._farmerMapUniqueIds = null;
+
+    const nextViloyat =
+      restore != null ? String(restore.viloyat || "") : this.state.viloyat;
+    const nextTuman =
+      restore != null ? String(restore.tuman || "") : this.state.tuman;
+    const geoChanged =
+      hadFarmer &&
+      restore != null &&
+      (String(this.state.viloyat || "") !== nextViloyat ||
+        String(this.state.tuman || "") !== nextTuman);
+
+    this._farmerSearchApplying = true;
+    this.setState(
+      {
+        graffSearchText: "",
+        graffSearchSuggestions: [],
+        graffSearchShowSuggestions: false,
+        graffSearchLoading: false,
+        selectedFarmerInn: "",
+        polygonMode: false,
+        selectedGraffUniqueid: "",
+        selectedGraffUniqueidClickedAt: undefined,
+        ...(restore != null
+          ? { viloyat: nextViloyat, tuman: nextTuman }
+          : {}),
+      },
+      () => {
+        this.emitGraffTableSearchClear();
+        if (this.state.connectionStatus !== "connected") {
+          this._farmerSearchApplying = false;
+          return;
+        }
+        if (!hadFarmer && !geoChanged) {
+          this._farmerSearchApplying = false;
+          return;
+        }
+
+        const zoomRequest =
+          !nextViloyat
+            ? ({ mode: "home", reason: "reset" } as const)
+            : nextTuman
+              ? ({ mode: "selection", reason: "district" } as const)
+              : ({ mode: "selection", reason: "region" } as const);
+
+        this.broadcastFilterState();
+        void this.applyMapFiltersOptimized(zoomRequest).finally(() => {
+          this._farmerSearchApplying = false;
+        });
+        void this.fetchDataWithCurrentState();
+      },
+    );
+  };
+
+  private handleGraffSearchClear = () => {
+    this.clearFarmerSearchAndRestoreGeo();
   };
 
   private handleGraffSearchRowClick = (record: GraffSearchRecord) => {
-    const label =
-      String(record.f_inn || record.f_name || "").trim();
+    const inn = String(record.f_inn || "").trim();
+    const name = String(record.f_name || "").trim();
+    const label = inn || name;
+    if (!label) return;
 
-    this.setState({
+    const recordViloyat = String(record.viloyat || record.region || "").trim();
+    const recordTuman = String(record.tuman || record.district || "").trim();
+    const hadViloyat = !!this.getEffectiveViloyat();
+
+    // Remember prior geography once per STIR session so X restores it.
+    if (!this._preFarmerSearchGeo) {
+      this._preFarmerSearchGeo = {
+        viloyat: String(this.state.viloyat || ""),
+        tuman: String(this.state.tuman || ""),
+      };
+    }
+
+    // Prefer exact STIR; name-only rows still filter via search text on Graff.
+    const updates: Partial<GeoWidgetState> = {
       graffSearchText: label,
       graffSearchSuggestions: [],
       graffSearchShowSuggestions: false,
       graffSearchLoading: false,
-    });
+      selectedFarmerInn: inn,
+      polygonMode: false,
+      selectedGraffUniqueid: "",
+      selectedGraffUniqueidClickedAt: undefined,
+    };
 
-    this.emitGraffTableRowSelected(record);
+    // Republic search: lock geography to the row so MapImage + VH can load.
+    // Tuman-scoped UI still searches viloyat-wide — move to the row's district
+    // when the user picks a result from another tuman.
+    if (!hadViloyat && recordViloyat) {
+      updates.viloyat = recordViloyat;
+      if (recordTuman) updates.tuman = recordTuman;
+    } else if (hadViloyat && recordTuman) {
+      updates.tuman = recordTuman;
+    }
+
+    this._farmerSearchApplying = true;
+    this.setState(updates as any, () => {
+      this.emitGraffTableSearchChanged(inn || name);
+      if (inn) {
+        void this.applyFarmerSearchSelection(inn);
+      } else {
+        this._farmerMapUniqueIds = null;
+        this._farmerSearchApplying = false;
+        this.broadcastFilterState();
+        void this.applyMapFiltersOptimized({
+          mode: "selection",
+          reason: "ndvi",
+        });
+      }
+    });
+  };
+
+  /**
+   * Resolve STIR → uniqueids, then refresh pie / VH / map zoom to those fields.
+   */
+  private applyFarmerSearchSelection = async (inn: string): Promise<void> => {
+    if (!this._isMounted) return;
+    const cleanInn = String(inn || "").trim();
+    if (!cleanInn) {
+      this._farmerMapUniqueIds = null;
+      return;
+    }
+
+    this._farmerSearchApplying = true;
+    try {
+      const scopeParts: string[] = [];
+      const yearClause = buildYearLikeClause(this.state.yil);
+      if (yearClause) scopeParts.push(yearClause);
+      const vilClause = this.buildViloyatRegionClause();
+      if (vilClause) scopeParts.push(vilClause);
+      if (this.state.tuman) {
+        const tumanClause = this.buildTumanDistrictClause();
+        if (tumanClause) scopeParts.push(tumanClause);
+      }
+      const scopeWhere = scopeParts.join(" AND ");
+      const ids = await queryAgriUniqueIdsForFarmerInn(cleanInn, scopeWhere);
+      if (!this._isMounted) return;
+      if (String(this.state.selectedFarmerInn || "").trim() !== cleanInn) return;
+      this._farmerMapUniqueIds = ids;
+
+      AgriLocalization.agriLog("farmerSearch:applied", {
+        inn: cleanInn,
+        uniqueidCount: ids.length,
+        viloyat: this.getEffectiveViloyat(),
+        tuman: this.state.tuman,
+      });
+
+      this.broadcastFilterState();
+      await this.applyMapFiltersOptimized({
+        mode: "selection",
+        reason: "ndvi",
+      });
+      await this.fetchDataWithCurrentState();
+    } catch (error: any) {
+      AgriLocalization.agriLog("farmerSearch:FAILED", {
+        inn: cleanInn,
+        error: String(error?.message || error),
+      });
+      this._farmerMapUniqueIds = [];
+      this.broadcastFilterState();
+    } finally {
+      this._farmerSearchApplying = false;
+    }
   };
 
   private renderGraffSearchDropdownFloating = () => {
@@ -4670,16 +4930,18 @@ export default class AgriLocalization extends React.PureComponent<
             const inn = String(record.f_inn || "").trim();
             const name = String(record.f_name || "").trim();
             const primaryLabel = inn || name || "—";
-            const secondaryName =
-              inn && name && name !== inn ? name : null;
             const regionParts = [
-              String(record.viloyat || record.region || "").trim(),
+              String(record.viloyat || record.region || "").trim() ||
+                String(this.getEffectiveViloyat() || "").trim(),
               String(record.tuman || record.district || "").trim(),
             ].filter(Boolean);
             const geoLabel = regionParts.join(" · ");
-            const rowKey = String(
-              record.f_inn || record.uniqueid || record.objectid || idx,
-            );
+            const rowKey = [
+              String(record.f_inn || "").trim(),
+              String(record.viloyat || "").trim(),
+              String(record.tuman || "").trim(),
+              String(idx),
+            ].join("|");
             const selectLabel =
               language === "en"
                 ? "Select row"
@@ -4703,11 +4965,6 @@ export default class AgriLocalization extends React.PureComponent<
                     <span className="agri-v20-graff-search-suggestion-inn">
                       {primaryLabel}
                     </span>
-                    {secondaryName ? (
-                      <span className="agri-v20-graff-search-suggestion-name">
-                        {secondaryName}
-                      </span>
-                    ) : null}
                   </span>
                   {geoLabel ? (
                     <span className="agri-v20-graff-search-suggestion-region">
@@ -5517,6 +5774,11 @@ export default class AgriLocalization extends React.PureComponent<
         this.buildUniqueIdClause(this.state.selectedGraffUniqueid, layer) || "";
     }
 
+    const farmerInn = String(this.state.selectedFarmerInn || "").trim();
+    const farmerInnClause = farmerInn
+      ? `UPPER(f_inn)=UPPER('${escapeArcGIS(farmerInn)}')`
+      : "";
+
     return assembleLocalizationWhere({
       yearClause,
       includeViloyat,
@@ -5529,6 +5791,7 @@ export default class AgriLocalization extends React.PureComponent<
       vhCategory,
       vhUniqueIds: this._vhMapUniqueIds,
       uniqueIdClause,
+      farmerInnClause,
       buildSpatialJoinWhere,
       withAccessWhere: withAgriAccessWhere,
     });
@@ -5644,6 +5907,7 @@ export default class AgriLocalization extends React.PureComponent<
       polygonMode: false,
       uniqueid: "",
       filterVhBarByCrop: chartFlags.filterVhBarByCrop,
+      farmerInn: String(this.state.selectedFarmerInn || "").trim(),
     });
   };
 
@@ -5676,6 +5940,9 @@ export default class AgriLocalization extends React.PureComponent<
       setState: (patch) => this.setState(patch as any),
       prefetchVhStatusUniqueIds: (date) => this.prefetchVhStatusUniqueIds(date),
       log: (phase, detail) => AgriLocalization.agriLog(phase, detail),
+      farmerUniqueIds: String(this.state.selectedFarmerInn || "").trim()
+        ? this._farmerMapUniqueIds
+        : null,
     });
   };
 
@@ -6540,13 +6807,30 @@ export default class AgriLocalization extends React.PureComponent<
     // keep them in _vhMapUniqueIds so Region/Pie broadcasts do not go empty.
     const deferredMapPaint = this._suppressLegacyVhOnMap;
     const vhActive = !!String(this.state.vh || "").trim();
-    const uniqueIds = deferredMapPaint
+    const farmerActive = !!String(this.state.selectedFarmerInn || "").trim();
+    const farmerIds =
+      farmerActive && Array.isArray(this._farmerMapUniqueIds)
+        ? this._farmerMapUniqueIds
+        : null;
+    const vhIds = deferredMapPaint
       ? null
       : vhActive && this._vhMapUniqueIds != null
         ? this._vhMapUniqueIds
         : null;
+    // Prefer STIR uniqueids; when both VH + STIR are active, intersect.
+    let uniqueIds: string[] | null = farmerIds;
+    if (farmerIds && vhIds) {
+      const vhSet = new Set(
+        vhIds.map((id) => String(id || "").replace(/[{}]/g, "").toLowerCase()),
+      );
+      uniqueIds = farmerIds.filter((id) =>
+        vhSet.has(String(id || "").replace(/[{}]/g, "").toLowerCase()),
+      );
+    } else if (!farmerIds) {
+      uniqueIds = vhIds;
+    }
     const mapVh =
-      vhActive && uniqueIds == null && !deferredMapPaint
+      vhActive && uniqueIds == null && !deferredMapPaint && !farmerActive
         ? String(this.state.vh || "")
         : "";
     const selectedTurlar = this.getSelectedTurlar();
@@ -7829,6 +8113,7 @@ export default class AgriLocalization extends React.PureComponent<
                       type="text"
                       value={graffSearchText}
                       onChange={this.handleGraffSearchInputChange}
+                      onFocus={this.handleGraffSearchFocus}
                       placeholder={graffSearchPlaceholder}
                       autoComplete="off"
                     />

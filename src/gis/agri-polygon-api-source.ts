@@ -91,18 +91,69 @@ export interface PolygonExportImageResult {
   width: number;
   height: number;
   /**
-   * Row-major per-pixel index values (NDVI/SAVI/…), used for map hover tooltips.
-   * Present for float / single-band rasters. For pre-colored RGB, prefer `rgba`
-   * + sampleIndexFromRgba (avoids a full-image reverse pass before first paint).
+   * Row-major per-pixel index values for map hover tooltips.
+   * Prefer values calibrated from export-image `X-Index-Min` / `X-Index-Max`
+   * headers (not raw TIFF stretch / RGB reverse on a 0..1 ramp).
    */
   values: Float32Array | null;
   /**
    * Row-major RGBA (length width*height*4) for lazy hover sampling on RGB TIFFs.
-   * Null when `values` already holds float indices.
+   * Null when `values` already holds calibrated indices.
    */
   rgba: Uint8ClampedArray | null;
   /** Sentinel for transparent / outside-polygon pixels. */
   noData: number | null;
+  /** From response header `X-Index-Min` (field stats for this export). */
+  indexMin: number | null;
+  /** From response header `X-Index-Max`. */
+  indexMax: number | null;
+  /** From response header `X-Index-Mean`. */
+  indexMean: number | null;
+}
+
+/** Read api-agri export-image stats headers (sent with response_format=tiff). */
+export function parseExportImageIndexHeaders(headers: Headers): {
+  indexMin: number | null;
+  indexMax: number | null;
+  indexMean: number | null;
+} {
+  const read = (name: string): number | null => {
+    const raw =
+      headers.get(name) ||
+      headers.get(name.toLowerCase()) ||
+      headers.get(name.replace(/X-/i, "x-"));
+    if (raw == null || String(raw).trim() === "") return null;
+    const n = Number(String(raw).trim());
+    return Number.isFinite(n) ? n : null;
+  };
+  return {
+    indexMin: read("X-Index-Min"),
+    indexMax: read("X-Index-Max"),
+    indexMean: read("X-Index-Mean"),
+  };
+}
+
+/**
+ * Map a 0..1 colormap / stretch position onto the real index range from
+ * export-image headers (chart min/max). Without headers, returns t01 as-is.
+ */
+export function mapStretch01ToIndexRange(
+  t01: number,
+  indexMin: number | null,
+  indexMax: number | null,
+): number {
+  if (!Number.isFinite(t01)) return t01;
+  if (
+    indexMin == null ||
+    indexMax == null ||
+    !Number.isFinite(indexMin) ||
+    !Number.isFinite(indexMax) ||
+    !(indexMax > indexMin)
+  ) {
+    return t01;
+  }
+  const t = Math.max(0, Math.min(1, t01));
+  return indexMin + t * (indexMax - indexMin);
 }
 
 /** Classic vegetation color stops (low → high) for client-side colorize + RGB reverse. */
@@ -902,6 +953,10 @@ async function fetchPolygonExportImageTiffUncached(params: {
     throw error;
   }
   rememberRegionDateWithImagery(params.regionId, params.rasterDate);
+  // Stats for this polygon+date — chart/hover must use these, not raw TIFF
+  // stretch values (RGB reverse on a 0..1 ramp often shows ~0.9 while true
+  // field NDVI max is ~0.5).
+  const indexHeaders = parseExportImageIndexHeaders(res.headers);
   const buffer = await res.arrayBuffer();
 
   const tiff = await fromArrayBuffer(buffer);
@@ -1052,9 +1107,49 @@ async function fetchPolygonExportImageTiffUncached(params: {
 
   ctx.putImageData(imageData, 0, 0);
 
-  // Only keep RGBA when hover floats were not recovered (typical RGB TIFF).
+  const { indexMin, indexMax, indexMean } = indexHeaders;
+  const hasHeaderRange =
+    indexMin != null &&
+    indexMax != null &&
+    Number.isFinite(indexMin) &&
+    Number.isFinite(indexMax) &&
+    indexMax > indexMin;
+
+  // Calibrate hover to header min/max. Server stretch=fixed paints a 0..1
+  // colormap; sampleIndexFromRgba / float 0..1 must be remapped to the real
+  // field range (e.g. 0.15–0.57) so tooltip matches Index chart stats.
+  let calibratedValues: Float32Array | null = null;
+  if (hasHeaderRange && hoverValues) {
+    // Float band already in header range → keep as-is. Remap only when the
+    // band looks like a 0..1 stretch (max well above X-Index-Max).
+    const looksLike01Stretch =
+      Number.isFinite(dataMax) && dataMax > (indexMax as number) + 0.08;
+    if (looksLike01Stretch) {
+      calibratedValues = new Float32Array(pixelCount);
+      for (let p = 0; p < pixelCount; p++) {
+        const v = hoverValues[p];
+        if (!Number.isFinite(v) || (noData != null && v === noData)) {
+          calibratedValues[p] = NaN;
+          continue;
+        }
+        calibratedValues[p] = mapStretch01ToIndexRange(v, indexMin, indexMax);
+      }
+    }
+  } else if (hasHeaderRange && samplesPerPixel >= 3) {
+    calibratedValues = new Float32Array(pixelCount);
+    for (let p = 0; p < pixelCount; p++) {
+      const o = p * 4;
+      const t = sampleIndexFromRgba(out[o], out[o + 1], out[o + 2], out[o + 3]);
+      calibratedValues[p] =
+        t == null ? NaN : mapStretch01ToIndexRange(t, indexMin, indexMax);
+    }
+  }
+
+  const finalHoverValues = calibratedValues || hoverValues;
+
+  // Only keep RGBA when calibrated/float hover values are missing.
   const rgbaForHover =
-    !hoverValues && samplesPerPixel >= 3
+    !finalHoverValues && samplesPerPixel >= 3
       ? new Uint8ClampedArray(out)
       : null;
 
@@ -1068,8 +1163,12 @@ async function fetchPolygonExportImageTiffUncached(params: {
     epsgCode,
     dataMin: Number.isFinite(dataMin) ? dataMin : null,
     dataMax: Number.isFinite(dataMax) ? dataMax : null,
-    hasHoverValues: Boolean(hoverValues),
+    indexMin,
+    indexMax,
+    indexMean,
+    hasHoverValues: Boolean(finalHoverValues),
     hasRgbaHover: Boolean(rgbaForHover),
+    hoverCalibratedFromHeaders: Boolean(calibratedValues),
   });
 
   return {
@@ -1078,8 +1177,11 @@ async function fetchPolygonExportImageTiffUncached(params: {
     epsgCode,
     width,
     height,
-    values: hoverValues,
+    values: finalHoverValues,
     rgba: rgbaForHover,
     noData,
+    indexMin,
+    indexMax,
+    indexMean,
   };
 }

@@ -55,13 +55,36 @@ echo "Version:       $VERSION"
 rm -rf "$WORK"
 gh repo clone "$REPO" "$WORK" -- --depth 1
 
-# Keep source on main for clone/dev; refresh only the portal package tree.
-rm -rf "$WORK/widgets"
+# Keep source on main for clone/dev; refresh portal package + source tree.
+rm -rf "$WORK/widgets" "$WORK/src" "$WORK/scripts"
 mkdir -p "$WORK/widgets/Agro_widgetV6" "$WORK/widgets/chunks"
 cp -r "$SRC/dist" "$WORK/widgets/Agro_widgetV6/"
 cp "$ROOT/config.json" "$WORK/widgets/Agro_widgetV6/config.json"
 cp "$ROOT/icon.svg" "$WORK/widgets/Agro_widgetV6/icon.svg"
 cp -r "$CHUNKS/." "$WORK/widgets/chunks/"
+
+# Mirror ExB widget source so the agri repo stays a usable clone target.
+cp -r "$ROOT/src" "$WORK/src"
+cp -r "$ROOT/scripts" "$WORK/scripts"
+cp "$ROOT/manifest.json" "$WORK/manifest.json"
+cp "$ROOT/config.json" "$WORK/config.json"
+cp "$ROOT/icon.svg" "$WORK/icon.svg"
+if [ -f "$ROOT/setting.tsx" ]; then cp "$ROOT/setting.tsx" "$WORK/setting.tsx"; fi
+if [ -f "$ROOT/runtime/widget.tsx" ]; then
+  mkdir -p "$WORK/runtime"
+  # Prefer full runtime/ if present in widget root layout.
+  :
+fi
+# Copy common root widget entry files when present.
+for f in setting.tsx setting.tsx.bak code.ts; do
+  [ -f "$ROOT/$f" ] && cp "$ROOT/$f" "$WORK/$f" || true
+done
+if [ -d "$ROOT/runtime" ]; then cp -r "$ROOT/runtime" "$WORK/runtime"; fi
+if [ -d "$ROOT/setting" ]; then cp -r "$ROOT/setting" "$WORK/setting"; fi
+if [ -d "$ROOT/dist" ]; then cp -r "$ROOT/dist" "$WORK/dist"; fi
+if [ -f "$ROOT/package.json" ]; then cp "$ROOT/package.json" "$WORK/package.json"; fi
+if [ -f "$ROOT/tsconfig.json" ]; then cp "$ROOT/tsconfig.json" "$WORK/tsconfig.json"; fi
+if [ -f "$ROOT/.gitignore" ]; then cp "$ROOT/.gitignore" "$WORK/.gitignore"; fi
 
 cat > "$WORK/widgets/Agro_widgetV6/manifest.json" <<EOF
 {

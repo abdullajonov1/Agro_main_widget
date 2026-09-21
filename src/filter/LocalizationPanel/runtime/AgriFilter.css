@@ -619,8 +619,8 @@ body.light-theme .agri-v20-root .agri-v20-theme-toggle[data-tooltip]::before,
 .agri-v20-graff-search-suggestion {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 14px;
   width: 100%;
   min-height: 44px;
   margin: 0;
@@ -654,8 +654,7 @@ body.light-theme .agri-v20-root .agri-v20-theme-toggle[data-tooltip]::before,
   display: flex;
   align-items: baseline;
   gap: 10px;
-  min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
 }
 
 .agri-v20-graff-search-suggestion-inn {
@@ -676,15 +675,16 @@ body.light-theme .agri-v20-root .agri-v20-theme-toggle[data-tooltip]::before,
 }
 
 .agri-v20-graff-search-suggestion-region {
-  flex-shrink: 0;
-  max-width: 42%;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #5ec8f0;
   font-size: 12px;
   font-weight: 600;
-  text-align: right;
+  text-align: left;
 }
 
 html.light-theme
@@ -753,7 +753,7 @@ body.light-theme .agri-v20-graff-search-suggestions::-webkit-scrollbar-thumb {
   }
 
   .agri-v20-graff-search-suggestion-region {
-    max-width: 48%;
+    max-width: none;
   }
 }
 

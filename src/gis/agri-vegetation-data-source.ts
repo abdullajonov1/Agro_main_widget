@@ -14,6 +14,7 @@ import { dedupedQueryFeatures } from "../data/agri-query-gateway";
 import { rememberAsync } from "../data/agri-persistent-cache";
 import { escapeArcGIS, dateEqualsClause } from "../data/agri-sql";
 import { combineAccessWhereIfFieldsExist } from "../shared/agri-access-config";
+import { buildSpatialJoinWhere } from "./agri-table-data-source";
 import { loadArcGISJSAPIModules } from "jimu-arcgis";
 
 export { dateEqualsClause } from "../data/agri-sql";
@@ -1257,6 +1258,11 @@ export interface VegetationStatusCountsParams extends VegetationScopeParams {
   cropId?: string;
   /** Multiple selected crops; queried together so one uniqueid is counted once. */
   cropIds?: string[];
+  /**
+   * Optional STIR-scoped polygon ids. When set, status counts are limited to
+   * these uniqueids (header farmer search).
+   */
+  uniqueIds?: string[];
 }
 
 export interface VegetationStatusCount {
@@ -1311,6 +1317,18 @@ export async function queryVegetationStatusCounts(
         .map((value) => `'${escapeArcGIS(value)}'`)
         .join(",")})`,
     );
+  }
+  const farmerUniqueIds = Array.from(
+    new Set(
+      (params.uniqueIds || [])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean),
+    ),
+  );
+  if (farmerUniqueIds.length) {
+    clauses.push(buildSpatialJoinWhere(farmerUniqueIds));
+  } else if (Array.isArray(params.uniqueIds) && params.uniqueIds.length === 0) {
+    return [];
   }
   const where = clauses.join(" AND ");
 

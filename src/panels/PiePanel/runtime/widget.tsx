@@ -104,6 +104,8 @@ interface AgriPieState {
   filterPieByVh: boolean;
   /** Signature of the uniqueid set used for VH→pie filtering. */
   pieVhUniqueIdsSig: string;
+  /** Exact STIR from header search (master filter). */
+  farmerInn: string;
 
   // UI state
   activeSlice: number | null;
@@ -318,6 +320,7 @@ export default class AgriPie extends React.PureComponent<
       turlar: [],
       filterPieByVh: false,
       pieVhUniqueIdsSig: "",
+      farmerInn: "",
       vh: "",
       ndviDate: "",
       barCategoryField: null,
@@ -462,7 +465,8 @@ export default class AgriPie extends React.PureComponent<
     const includeViloyat = opts.includeViloyat !== false;
     // Match Agro_widgetV1: scope by selected viloyat (not lockedViloyat)
     // when includeViloyat is on; layer routing handles region layers.
-    const { yil, viloyat, tuman, turi, lockedViloyat, turlar } = this.state;
+    const { yil, viloyat, tuman, turi, lockedViloyat, turlar, farmerInn } =
+      this.state;
     // Pie selection keys are crop_id; SQL still filters the `turi` text field.
     const turiNames = this.cropIdsToTuriNames(
       Array.isArray(turlar) && turlar.length
@@ -481,6 +485,7 @@ export default class AgriPie extends React.PureComponent<
         turlar: turiNames,
         lockedViloyat: lockedViloyat || "",
         districtCode: opts.districtCode ?? null,
+        farmerInn: farmerInn || "",
       },
       { includeCategory, includeViloyat },
     );
@@ -915,6 +920,9 @@ export default class AgriPie extends React.PureComponent<
     const nextPieVhUniqueIdsSig = nextFilterPieByVh
       ? getPieVhFilterUniqueIdsSig()
       : "";
+    const nextFarmerInn = hasField("farmerInn")
+      ? String(incoming.farmerInn || "").trim()
+      : this.state.farmerInn;
 
     const nextBarField = hasField("barCategoryField")
       ? (incoming.barCategoryField ?? null)
@@ -936,7 +944,8 @@ export default class AgriPie extends React.PureComponent<
       nextYil !== this.state.yil ||
       effectiveViloyat !== this.state.viloyat ||
       nextTuman !== this.state.tuman ||
-      nextLockedViloyat !== this.state.lockedViloyat;
+      nextLockedViloyat !== this.state.lockedViloyat ||
+      nextFarmerInn !== this.state.farmerInn;
 
     const barSelectionChanged =
       nextBarField !== this.state.barCategoryField ||
@@ -998,6 +1007,7 @@ export default class AgriPie extends React.PureComponent<
         ndviDate: nextNdviDate,
         filterPieByVh: nextFilterPieByVh,
         pieVhUniqueIdsSig: nextPieVhUniqueIdsSig,
+        farmerInn: nextFarmerInn,
         barCategoryField: nextBarField,
         barCategoryValue: nextBarValue,
         selectedCategory: nextTuri || null,

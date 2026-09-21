@@ -134,6 +134,7 @@ import {
   fetchPolygonExportImageTiff,
   warmPolygonApiConnection,
   sampleIndexFromRgba,
+  mapStretch01ToIndexRange,
   getExportImageSeasonMonths,
   isExportImageNoImageryError,
   isExportImageOutOfSeasonError,
@@ -485,6 +486,8 @@ interface AgriGraffWidgetState {
   searchError?: string | null;
   searchResultCount?: number | null;
   isSearchActive?: boolean;  // Track if search suggestion was selected (applies WHERE filter)
+  /** Exact STIR from header search (master filter) — scopes Jadval to that farmer. */
+  farmerInn?: string;
 
   // Only configured fields from settings
   configuredFields: string[];
@@ -657,6 +660,10 @@ export default class AgriGraffWidget extends React.PureComponent<
   private _vegetationRasterSample: {
     values: Float32Array | null;
     rgba: Uint8ClampedArray | null;
+    /** export-image X-Index-Min — remap RGBA 0..1 stretch when values missing. */
+    indexMin: number | null;
+    /** export-image X-Index-Max. */
+    indexMax: number | null;
     width: number;
     height: number;
     xmin: number;
@@ -1080,6 +1087,7 @@ export default class AgriGraffWidget extends React.PureComponent<
       searchError: null,
       searchResultCount: null,
       isSearchActive: false,
+      farmerInn: "",
 
       configuredFields: [],
       externalFilters: {},
@@ -1674,6 +1682,7 @@ export default class AgriGraffWidget extends React.PureComponent<
                 searchError: null,
                 searchResultCount: null,
                 isSearchActive: false,
+                farmerInn: "",
               }
             : {}),
         },
@@ -1747,6 +1756,7 @@ export default class AgriGraffWidget extends React.PureComponent<
           searchError: null,
           searchResultCount: null,
           isSearchActive: false,
+          farmerInn: "",
         },
         () => {
           try {
@@ -2073,12 +2083,21 @@ export default class AgriGraffWidget extends React.PureComponent<
     const vhIdsChanged =
       vhIdsSig(vhUniqueids) !== vhIdsSig(this.state.vhUniqueids);
 
+    const nextFarmerInn = String(f.farmerInn || "").trim();
+    const farmerInnChanged =
+      nextFarmerInn !== String(this.state.farmerInn || "").trim();
+
     // Polygon pick/clear does not change geography. syncExternal already
     // cleared selectedNdviDate, so comparing against the hub's effective
     // ndviDate would falsely fall through into scheduleRefresh /
     // applyMapFilters — rewriting MapImage definitionExpression and racing
     // the popup click path.
-    if (geographyUnchanged && polygonOnlyEvent && !vhIdsChanged) {
+    if (
+      geographyUnchanged &&
+      polygonOnlyEvent &&
+      !vhIdsChanged &&
+      !farmerInnChanged
+    ) {
       if (nextLanguage !== this.state.language) {
         this.setState({ language: nextLanguage });
       }
@@ -2088,7 +2107,8 @@ export default class AgriGraffWidget extends React.PureComponent<
     if (
       geographyUnchanged &&
       ndviDate === (this.state.selectedNdviDate || "") &&
-      !vhIdsChanged
+      !vhIdsChanged &&
+      !farmerInnChanged
     ) {
       // Language-only change: update UI state, but don't refetch data.
       if (nextLanguage !== this.state.language) {
@@ -2127,11 +2147,13 @@ export default class AgriGraffWidget extends React.PureComponent<
         next.yil !== this.state.regionalFilters.yil ||
         polygonNotInVhStatus);
 
-    // Search filter is scoped to the previous geography — clear on yil/viloyat/tuman.
+    // Search filter is scoped to the previous geography — clear on yil/viloyat/tuman,
+    // unless master filter still carries an active header STIR selection.
     const shouldClearSearch =
-      next.viloyat !== this.state.regionalFilters.viloyat ||
-      next.tuman !== this.state.regionalFilters.tuman ||
-      next.yil !== this.state.regionalFilters.yil;
+      !nextFarmerInn &&
+      (next.viloyat !== this.state.regionalFilters.viloyat ||
+        next.tuman !== this.state.regionalFilters.tuman ||
+        next.yil !== this.state.regionalFilters.yil);
 
     if (shouldClearPolygonSelection || shouldClearSearch) {
       // Prevent restoring a pre-selection extent from a previous geography.
@@ -2173,12 +2195,23 @@ export default class AgriGraffWidget extends React.PureComponent<
         loadingVegetation: shouldRefreshGraph
           ? true
           : this.state.loadingVegetation,
-        searchText: shouldClearSearch ? "" : this.state.searchText,
-        searchError: shouldClearSearch ? null : this.state.searchError,
-        searchResultCount: shouldClearSearch
+        farmerInn: nextFarmerInn,
+        searchText: nextFarmerInn
+          ? nextFarmerInn
+          : shouldClearSearch
+            ? ""
+            : this.state.searchText,
+        searchError: shouldClearSearch && !nextFarmerInn
+          ? null
+          : this.state.searchError,
+        searchResultCount: shouldClearSearch && !nextFarmerInn
           ? null
           : this.state.searchResultCount,
-        isSearchActive: shouldClearSearch ? false : this.state.isSearchActive,
+        isSearchActive: nextFarmerInn
+          ? true
+          : shouldClearSearch
+            ? false
+            : this.state.isSearchActive,
         records: [],
         currentPage: 1,
         loading: true,
@@ -2609,6 +2642,7 @@ export default class AgriGraffWidget extends React.PureComponent<
           searchError: null,
           searchResultCount: null,
           isSearchActive: false,
+          farmerInn: "",
         },
         () => {
           if (!preserveSelection) {
@@ -2627,6 +2661,10 @@ export default class AgriGraffWidget extends React.PureComponent<
         searchText: nextQuery,
         searchError: null,
         isSearchActive: true,
+        // Committed header selection only (typing no longer emits this event).
+        farmerInn: /^\d{5,}$/.test(nextQuery)
+          ? nextQuery
+          : String(this.state.farmerInn || "").trim(),
       },
       () => {
         if (this.state.connectionStatus === "connected") {
@@ -2780,11 +2818,14 @@ export default class AgriGraffWidget extends React.PureComponent<
       if (statusClause) clauses.push(statusClause);
     }
 
-    // ✅ Search term filter - include ONLY if search suggestion was selected
-    if (isSearchActive && searchText?.trim()) {
+    // ✅ Search / STIR filter
+    const farmerInn = String(this.state.farmerInn || "").trim();
+    if (farmerInn) {
+      const innField = this.resolveFieldCaseInsensitive("f_inn") || "f_inn";
+      clauses.push(`UPPER(${innField})=UPPER('${escapeArcGIS(farmerInn)}')`);
+    } else if (isSearchActive && searchText?.trim()) {
       const searchClause = this.buildSearchWhere(searchText);
       if (searchClause && searchClause !== "1=0") {
-
         clauses.push(`(${searchClause})`);
       }
     }
@@ -4371,13 +4412,10 @@ export default class AgriGraffWidget extends React.PureComponent<
       this.scheduleGraphViewportRefresh();
     }
 
-    if (
-      prevState.viewMode !== "table" &&
-      this.state.viewMode === "table" &&
-      (this.state.searchText || "").trim()
-    ) {
-      this.runAutoSearch((this.state.searchText || "").trim());
-    }
+    // Index → Jadval: switchToTable already calls fetchData. Never runAutoSearch
+    // here — that used to zoom the map whenever searchText was non-empty (even
+    // from typing in the header before a dropdown row was chosen).
+
 
     // Regional timeseries refetch is owned by handleMasterFilterChanged /
     // switchToGraph — avoid a second overlapping fetch in componentDidUpdate.
@@ -6784,7 +6822,18 @@ export default class AgriGraffWidget extends React.PureComponent<
 
     const x = mapPoint.x;
     const y = mapPoint.y;
-    const { xmin, ymin, xmax, ymax, width, height, values, rgba } = sample;
+    const {
+      xmin,
+      ymin,
+      xmax,
+      ymax,
+      width,
+      height,
+      values,
+      rgba,
+      indexMin,
+      indexMax,
+    } = sample;
     if (x < xmin || x > xmax || y < ymin || y > ymax) return null;
 
     const col = Math.floor(((x - xmin) / (xmax - xmin)) * width);
@@ -6796,13 +6845,77 @@ export default class AgriGraffWidget extends React.PureComponent<
     if (values && values.length === width * height) {
       const v = values[pixelIndex];
       if (!Number.isFinite(v)) return null;
+      // Absolute indices stay; 0..1 stretch above field max → header/chart range.
+      if (
+        indexMin != null &&
+        indexMax != null &&
+        indexMax > indexMin &&
+        v > indexMax + 0.08
+      ) {
+        return mapStretch01ToIndexRange(v, indexMin, indexMax);
+      }
       return v;
     }
     if (rgba && rgba.length === width * height * 4) {
       const o = pixelIndex * 4;
-      return sampleIndexFromRgba(rgba[o], rgba[o + 1], rgba[o + 2], rgba[o + 3]);
+      const t01 = sampleIndexFromRgba(
+        rgba[o],
+        rgba[o + 1],
+        rgba[o + 2],
+        rgba[o + 3],
+      );
+      if (t01 == null) return null;
+      // Prefer header/chart range so tooltip matches Index series (not 0..1 ramp).
+      return mapStretch01ToIndexRange(t01, indexMin, indexMax);
     }
     return null;
+  };
+
+  /**
+   * Field index min/max for hover calibration: prefer export-image
+   * `X-Index-*` headers, else the selected date's chart row (`ndvi_min`…).
+   */
+  private resolveHoverIndexRange = (
+    indiceType: string,
+    rasterDate: string,
+    fromExport?: { indexMin: number | null; indexMax: number | null } | null,
+  ): { indexMin: number | null; indexMax: number | null } => {
+    const expMin = fromExport?.indexMin ?? null;
+    const expMax = fromExport?.indexMax ?? null;
+    if (
+      expMin != null &&
+      expMax != null &&
+      Number.isFinite(expMin) &&
+      Number.isFinite(expMax) &&
+      expMax > expMin
+    ) {
+      return { indexMin: expMin, indexMax: expMax };
+    }
+
+    const key = String(indiceType || "ndvi")
+      .trim()
+      .toLowerCase();
+    const advertised = this.state.polygonAvailableDates || [];
+    const target =
+      this.resolveAgainstAvailableDates(rasterDate, advertised) ||
+      formatArcgisDateToYmd(rasterDate) ||
+      String(rasterDate || "").trim();
+    const row = (this.state.vegetationData || []).find((r: any) => {
+      const rawDate = r?.raster_date ?? r?.date;
+      if (!rawDate) return false;
+      const ymd =
+        this.resolveAgainstAvailableDates(rawDate, advertised) ||
+        formatArcgisDateToYmd(rawDate);
+      return ymd === target;
+    }) as any;
+    if (!row) return { indexMin: null, indexMax: null };
+
+    const min = Number(row[`${key}_min`]);
+    const max = Number(row[`${key}_max`]);
+    if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
+      return { indexMin: min, indexMax: max };
+    }
+    return { indexMin: null, indexMax: null };
   };
 
   private attachVegetationRasterHover = (
@@ -7300,9 +7413,16 @@ export default class AgriGraffWidget extends React.PureComponent<
         result.rgba.length === result.width * result.height * 4;
 
       if (hasFloatValues || hasRgba) {
+        const hoverRange = this.resolveHoverIndexRange(
+          indiceType,
+          normalizedDate,
+          result,
+        );
         this._vegetationRasterSample = {
           values: hasFloatValues ? result.values : null,
           rgba: hasFloatValues ? null : result.rgba,
+          indexMin: hoverRange.indexMin,
+          indexMax: hoverRange.indexMax,
           width: result.width,
           height: result.height,
           xmin: overlayExtent.xmin,
@@ -9756,8 +9876,16 @@ export default class AgriGraffWidget extends React.PureComponent<
     const isInitializing =
       connectionStatus === "connecting" || connectionStatus === "idle";
 
-    // 🔎 Client-side refine (server already filters when isSearchActive)
+    // 🔎 Client-side refine only after a committed search selection.
     const getFilteredRecords = (): RecordData[] => {
+      const farmerInn = String(this.state.farmerInn || "").trim().toLowerCase();
+      if (farmerInn) {
+        return records.filter(
+          (record) =>
+            String(record.f_inn || "").trim().toLowerCase() === farmerInn,
+        );
+      }
+      if (!isSearchActive) return records;
       const term = (searchText || "").trim().toLowerCase();
       if (!term) return records;
 

@@ -51,6 +51,8 @@ export type VhBarComputeDeps = {
   setState: (patch: any) => void;
   prefetchVhStatusUniqueIds: (date: string) => void;
   log: (phase: string, detail?: any) => void;
+  /** Header STIR selection — uniqueids of that farmer's parcels. */
+  farmerUniqueIds?: string[] | null;
 };
 
 export async function executeVhBarCompute(
@@ -130,10 +132,28 @@ export async function executeVhBarCompute(
     String(yil || "").match(/\b(18|19|20)\d{2}\b/)?.[0] || "";
   if (!selectedYear) return zeroResult;
 
+  const farmerUniqueIds = Array.from(
+    new Set(
+      (deps.farmerUniqueIds || [])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean),
+    ),
+  );
+  // STIR selected but no parcels resolved → empty VH bar.
+  if (
+    Array.isArray(deps.farmerUniqueIds) &&
+    deps.farmerUniqueIds.length === 0
+  ) {
+    return zeroResult;
+  }
+  const farmerFilter = farmerUniqueIds.length ? farmerUniqueIds : undefined;
+
   const forcedNdvi = (deps.state.ndviDate || "").trim();
 
   // --- Republic: sum per-viloyat status buckets (no nation-wide uniqueid page) ---
-  if (!effectiveViloyat) {
+  // Farmer STIR selection always needs a viloyat (Localization sets it from
+  // the search row); skip the republic aggregate when farmerFilter is set.
+  if (!effectiveViloyat && !farmerFilter) {
     try {
       let regionScopes: Array<{ region: number; date: string }> = [];
       if (deps.state.ndviDateLocked && forcedNdvi) {
@@ -283,7 +303,8 @@ export async function executeVhBarCompute(
 
     for (const ndviDate of candidates) {
       let rows: VhServiceStatusRow[] = [];
-      if (REGION_VH_BAR_USE_STATUS_STATS) {
+      // Farmer STIR: always use uniqueid-aware counts (status-stats has no ids).
+      if (REGION_VH_BAR_USE_STATUS_STATS && !farmerFilter) {
         try {
           rows = await getVhBarStatusCountsByStatusCached({
             region: regionNum,
@@ -302,6 +323,7 @@ export async function executeVhBarCompute(
             district: districtNum,
             date: ndviDate,
             cropIds: cropFilter,
+            uniqueIds: farmerFilter,
           });
         } catch {
           continue;

@@ -7,7 +7,12 @@
  * IMPORTANT: do not "simplify" year matching — Region/Pie use digitFallback;
  * Graff uses match-only. Both paths are intentional.
  */
-import { escapeLikeLiteral, eqAposSmart, buildTumanEqualsSql } from "../data/agri-sql";
+import {
+  escapeArcGIS,
+  escapeLikeLiteral,
+  eqAposSmart,
+  buildTumanEqualsSql,
+} from "../data/agri-sql";
 import { buildTurlarSqlClause } from "../shared/agri-crop-labels";
 import { withAgriAccessWhere } from "../gis/feature-layer-data";
 
@@ -30,6 +35,8 @@ export type TableFilterInput = {
   turi?: string;
   turlar?: string[];
   lockedViloyat?: string;
+  /** Exact STIR / f_inn from header search selection. */
+  farmerInn?: string;
 };
 
 /** Extract a year token the same way panels historically did. */
@@ -162,6 +169,11 @@ export function buildPieStatsWhere(
   if (includeCategory && input.turi) {
     const cropClause = buildTurlarSqlClause("turi", [input.turi]);
     if (cropClause) clauses.push(cropClause);
+  }
+
+  const farmerInn = String(input.farmerInn || "").trim();
+  if (farmerInn) {
+    clauses.push(`UPPER(f_inn)=UPPER('${escapeArcGIS(farmerInn)}')`);
   }
 
   return withAgriAccessWhere(joinAndClauses(clauses, "1=1"));
