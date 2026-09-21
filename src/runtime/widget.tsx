@@ -15,10 +15,7 @@ import PiePanel from "../panels/PiePanel";
 import BarPanel from "../panels/BarPanel";
 import DateIndexPanel from "../panels/DateIndexPanel/runtime/widget";
 import PopupPanel from "../panels/PopupPanel/runtime/widget";
-import {
-  LazyAgriGraff10,
-  LazyPanelSuspense,
-} from "./lazy-panels";
+import GraffPanel from "../panels/GraffPanel";
 import { agriNoDataLabel } from "../shared/agriNoDataLabel";
 import AgriChartLoader from "../shared/AgriChartLoader";
 import { TriangleAlert } from "lucide-react";
@@ -35,6 +32,7 @@ import {
 import "../panels/PiePanel/runtime/AgriPie.css";
 import "../panels/BarPanel/runtime/AgriBar.css";
 import "../panels/PopupPanel/runtime/AgriPolygon.css";
+import "../panels/GraffPanel/runtime/AgriGraff.css";
 import "./agri-dashboard.css";
 import { setAccessConfig } from "../shared/agri-access-config";
 import { setAgriServiceUrls } from "../shared/agri-service-urls";
@@ -1283,11 +1281,7 @@ export default class AgriDashboard extends React.PureComponent<
               <PiePanel {...this.childProps("pie", baseConfig)} />
             </div>
             <div className="agri-dashboard-widget-slot">
-              <LazyPanelSuspense>
-                <LazyAgriGraff10
-                  {...this.childProps("graff", baseConfig)}
-                />
-              </LazyPanelSuspense>
+              <GraffPanel {...this.childProps("graff", baseConfig)} />
             </div>
             <div className="agri-dashboard-widget-slot">
               <BarPanel {...this.childProps("bar", baseConfig)} />

@@ -57,10 +57,10 @@ cat > "$WORK/widgets/Agro_widgetV6/manifest.json" <<'EOF'
   "name": "Agro_widgetV6",
   "label": "Space Agro Monitoring V6",
   "type": "widget",
-  "version": "6.0.9",
+  "version": "6.1.0",
   "exbVersion": "1.16.0",
   "author": "abdullajonov1",
-  "description": "Self-contained Space Agro Monitoring dashboard (panels/gis/data layout). Single-date export-image walk, VH region speedups, eager Popup. Cache-bust 6.0.9.",
+  "description": "Portal build 6.1.0: single-date export-image, eager Graff+Popup. Update Agro_widgetV6 in Portal (not Agro-main-widget).",
   "copyright": "",
   "license": "",
   "properties": {
