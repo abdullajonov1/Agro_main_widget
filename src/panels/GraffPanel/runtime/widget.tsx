@@ -1396,8 +1396,14 @@ export default class AgriGraffWidget extends React.PureComponent<
         isRegionDateWithoutImagery(regionId, guessedDate));
     const date = guessRefused ? "" : guessedDate;
     this._optimisticDateBeforeClear = null;
-    if (!date) {
-      // No date yet — still start available-dates → TIFF into shared cache.
+    // Only fire a direct export-image when this date is already proven for
+    // the region/polygon. Otherwise a guessed date + the dates walk race
+    // two (or three) different raster_date requests on one click.
+    const dateProven =
+      !!date &&
+      (this._verifiedOverlayDates.has(`${clean}|${date.slice(0, 10)}`) ||
+        isRegionDateWithImagery(regionId, date));
+    if (!dateProven) {
       this.beginVegetationImageSurfaceLoading();
       prefetchVegetationOverlayForUniqueid(clean, {
         regionId,
@@ -1409,6 +1415,8 @@ export default class AgriGraffWidget extends React.PureComponent<
         uniqueid: clean,
         regionId,
         year: year ?? null,
+        guessedDate: date || null,
+        reason: date ? "guess-unproven" : "no-date",
       });
       return;
     }
@@ -7588,10 +7596,10 @@ export default class AgriGraffWidget extends React.PureComponent<
           );
           return [] as string[];
         });
-        // One shared walk (parallel in-season candidates) — warms TIFF cache
-        // and avoids the old September→Apr-30→Apr-29 sequential 400 cascade.
-        // Registered as the pending walk so the series/pack overlay paths
-        // below wait for its verified date instead of probing their own.
+        // One shared walk — one export-image date at a time (sequential on
+        // 400). Popup prefetch + this path share exportDateWalkInFlight.
+        // Registered as the pending walk so series/pack overlay paths wait
+        // for its verified date instead of probing their own.
         const walkPromise: Promise<{ date: string } | null> =
           availableDatesPromise
             .then(async (dates) => {

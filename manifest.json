@@ -1,11 +1,11 @@
 {
   "name": "Agro_widgetV5",
-  "label": "Space Agro Monitoring V6.0.7",
+  "label": "Space Agro Monitoring V6.0.8",
   "type": "widget",
-  "version": "6.0.7",
+  "version": "6.0.8",
   "exbVersion": "1.16.0",
   "author": "abdullajonov1",
-  "description": "Self-contained Space Agro Monitoring dashboard (panels/gis/data layout). VH bar region speedups, eager Popup (no overlay-prefetch chunk), access/SQL hardening. Local folder Agro_widgetV5; GitHub Agro_main_widget.",
+  "description": "Self-contained Space Agro Monitoring dashboard (panels/gis/data layout). Single-date export-image walk (no parallel 2–3 date races), VH region speedups, eager Popup. Local Agro_widgetV5; GitHub Agro_main_widget; portal Agro_widgetV6.",
   "copyright": "",
   "license": "",
   "properties": {

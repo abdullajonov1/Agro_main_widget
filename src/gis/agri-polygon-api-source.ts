@@ -460,7 +460,8 @@ export function listExportRasterDateCandidates(
     opts?.uniqueid || "",
     opts?.cropId,
   );
-  const limit = Math.max(1, opts?.limit ?? 3);
+  // Default 1 — one export-image at a time (caller retries on 400).
+  const limit = Math.max(1, opts?.limit ?? 1);
   const out: string[] = [];
   const exclude = [...(opts?.exclude || [])];
   while (out.length < limit) {
@@ -723,9 +724,11 @@ const exportDateWalkInFlight = new Map<
 >();
 
 /**
- * Fetch available-dates (or use provided), then race a small parallel batch of
- * in-season candidates. First HTTP 200 wins; 400s update season/imagery caches.
- * Deduped so overlapping table-click paths do not stack sequential 400 cascades.
+ * Fetch available-dates (or use provided), then try export-image **one date
+ * at a time** (newest in-season first). On HTTP 400, learn season/imagery
+ * gaps and step to the next candidate — never race 2–3 dates in parallel
+ * (that was flooding Network on every polygon click).
+ * Deduped so Popup prefetch + Graff share one walk per polygon.
  */
 export async function resolveExportImageWithDateWalk(params: {
   uniqueid: string;
@@ -761,53 +764,30 @@ export async function resolveExportImageWithDateWalk(params: {
     if (!dates?.length) return null;
 
     const tried: string[] = [];
+    // Up to 4 sequential probes — stop at first HTTP 200.
     for (let round = 0; round < 4; round++) {
-      let candidates = listExportRasterDateCandidates(dates, {
+      const candidates = listExportRasterDateCandidates(dates, {
         uniqueid: id,
         cropId: params.cropId,
         regionId: params.regionId,
         exclude: tried,
-        limit: 3,
+        limit: 1,
       });
       if (!candidates.length) return null;
-      // Region scene already proven for the newest candidate (another
-      // polygon of this region got a 200 on it) → single request, no
-      // speculative siblings that would 400 on unknown gaps.
-      if (isRegionDateWithImagery(params.regionId, candidates[0])) {
-        candidates = [candidates[0]];
-      }
+      const date = candidates[0];
+      tried.push(date);
 
-      const outcomes = await Promise.all(
-        candidates.map(async (date) => {
-          try {
-            const result = await fetchPolygonExportImageTiff({
-              uniqueid: id,
-              regionId: params.regionId,
-              rasterDate: date,
-              indiceType,
-              stretch: params.stretch || "fixed",
-            });
-            return { date, result, err: null as unknown };
-          } catch (err) {
-            return { date, result: null, err };
-          }
-        }),
-      );
-
-      // Learn from EVERY 400 in the batch before returning the winner —
-      // otherwise a gap behind the first success (e.g. 04-28 ok, 04-27 no
-      // imagery) is never cached and the next polygon 400s on it again.
-      let hit: { date: string; result: PolygonExportImageResult } | null = null;
-      for (const outcome of outcomes) {
-        tried.push(outcome.date);
-        if (outcome.result) {
-          rememberRegionDateWithImagery(params.regionId, outcome.date);
-          if (!hit || outcome.date > hit.date) {
-            hit = { date: outcome.date, result: outcome.result };
-          }
-          continue;
-        }
-        const err = outcome.err;
+      try {
+        const result = await fetchPolygonExportImageTiff({
+          uniqueid: id,
+          regionId: params.regionId,
+          rasterDate: date,
+          indiceType,
+          stretch: params.stretch || "fixed",
+        });
+        rememberRegionDateWithImagery(params.regionId, date);
+        return { date, result };
+      } catch (err) {
         if (isExportImageOutOfSeasonError(err)) {
           const months = parseExportImageSeasonMonths(err);
           const crop = parseExportImageCropId(err);
@@ -815,10 +795,12 @@ export async function resolveExportImageWithDateWalk(params: {
             rememberExportImageSeasonMonths(id, months, crop ?? params.cropId);
           }
         } else if (isExportImageNoImageryError(err)) {
-          rememberRegionDateWithoutImagery(params.regionId, outcome.date);
+          rememberRegionDateWithoutImagery(params.regionId, date);
+        } else {
+          // Non-season/imagery failure — do not burn remaining candidates.
+          return null;
         }
       }
-      if (hit) return hit;
     }
     return null;
   })().finally(() => {
