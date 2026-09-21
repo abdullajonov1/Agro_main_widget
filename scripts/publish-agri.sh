@@ -127,7 +127,9 @@ Do **not** register the raw GitHub source URL as a custom widget — Portal need
 EOF
 
 cd "$WORK"
+# Source .gitignore ignores "dist/" — force-add the portal package tree.
 git add -A
+git add -f widgets/
 if git diff --cached --quiet; then
   echo "No changes to publish."
   exit 0

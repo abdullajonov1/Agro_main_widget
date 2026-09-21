@@ -3,3 +3,7 @@ dist/
 .DS_Store
 *.log
 .cache/
+
+# Portal package on agri repo (GitHub Pages)
+!widgets/
+!widgets/**
