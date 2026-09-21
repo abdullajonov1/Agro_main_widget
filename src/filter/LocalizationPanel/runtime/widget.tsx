@@ -4593,12 +4593,12 @@ export default class AgriLocalization extends React.PureComponent<
         {
           graffSearchText: nextValue,
           selectedFarmerInn: "",
-          ...(restore != null
-            ? {
-                viloyat: String(restore.viloyat || ""),
-                tuman: String(restore.tuman || ""),
-              }
-            : {}),
+          viloyat:
+            restore != null
+              ? String(restore.viloyat || "")
+              : this.state.viloyat,
+          tuman:
+            restore != null ? String(restore.tuman || "") : this.state.tuman,
         },
         () => {
           this.emitGraffTableSearchClear();
@@ -4713,9 +4713,8 @@ export default class AgriLocalization extends React.PureComponent<
         polygonMode: false,
         selectedGraffUniqueid: "",
         selectedGraffUniqueidClickedAt: undefined,
-        ...(restore != null
-          ? { viloyat: nextViloyat, tuman: nextTuman }
-          : {}),
+        viloyat: nextViloyat,
+        tuman: nextTuman,
       },
       () => {
         this.emitGraffTableSearchClear();
