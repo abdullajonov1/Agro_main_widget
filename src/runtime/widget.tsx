@@ -14,9 +14,9 @@ import RegionPanel from "../panels/RegionPanel";
 import PiePanel from "../panels/PiePanel";
 import BarPanel from "../panels/BarPanel";
 import DateIndexPanel from "../panels/DateIndexPanel/runtime/widget";
+import PopupPanel from "../panels/PopupPanel/runtime/widget";
 import {
   LazyAgriGraff10,
-  LazyAgriPopup,
   LazyPanelSuspense,
 } from "./lazy-panels";
 import { agriNoDataLabel } from "../shared/agriNoDataLabel";
@@ -34,6 +34,7 @@ import {
 // Panel CSS before dashboard so agri-dashboard.css layout rules win (donut stays circular).
 import "../panels/PiePanel/runtime/AgriPie.css";
 import "../panels/BarPanel/runtime/AgriBar.css";
+import "../panels/PopupPanel/runtime/AgriPolygon.css";
 import "./agri-dashboard.css";
 import { setAccessConfig } from "../shared/agri-access-config";
 import { setAgriServiceUrls } from "../shared/agri-service-urls";
@@ -1162,9 +1163,7 @@ export default class AgriDashboard extends React.PureComponent<
             className="agri-dashboard-agri-host"
             aria-label="Polygon attribute popup"
           >
-            <LazyPanelSuspense>
-              <LazyAgriPopup {...this.childProps("popup", popupConfig)} />
-            </LazyPanelSuspense>
+            <PopupPanel {...this.childProps("popup", popupConfig)} />
           </div>,
           portalTarget,
         )
