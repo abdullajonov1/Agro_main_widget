@@ -1,11 +1,11 @@
 {
   "name": "Agro_widgetV5",
-  "label": "Space Agro Monitoring V6.1.0",
+  "label": "Space Agro Monitoring V6.1.1",
   "type": "widget",
-  "version": "6.1.0",
+  "version": "6.1.1",
   "exbVersion": "1.16.0",
   "author": "abdullajonov1",
-  "description": "Portal build 6.1.0: single-date export-image, eager Graff+Popup (no lazy chunks for overlay). Use Agro_widgetV6 on Portal — not Agro-main-widget.",
+  "description": "Space Agro Monitoring. Portal package: https://abdullajonov1.github.io/agri/widgets/Agro_widgetV6/manifest.json — single-date export-image, eager Graff+Popup.",
   "copyright": "",
   "license": "",
   "properties": {
