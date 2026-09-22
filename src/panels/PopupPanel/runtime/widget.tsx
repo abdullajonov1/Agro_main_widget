@@ -83,7 +83,7 @@ import {
 import { bindMasterFilter } from "../../../data/agri-filter-bus";
 import AgriChartLoader from "../../../shared/AgriChartLoader";
 import { prefetchVegetationOverlayForUniqueid } from "../../../gis/agri-vegetation-overlay-prefetch";
-import { resolveCropIdFromAttributes } from "../../../gis/agri-polygon-api-source";
+import { resolveCropIdFromAttributes, resolveRegionIdFromAttributes } from "../../../gis/agri-polygon-api-source";
 import {
   getInitialLang,
   getInitialTheme,
@@ -2248,6 +2248,7 @@ export default class AgriPolygon extends React.PureComponent<
     uniqueid: string,
     polygonMode: boolean,
     clickedAt?: number,
+    regionId?: number | null,
   ): void => {
     try {
       document.dispatchEvent(
@@ -2256,6 +2257,8 @@ export default class AgriPolygon extends React.PureComponent<
             source: "AgriPopup",
             polygonMode,
             uniqueid: polygonMode ? uniqueid : "",
+            regionId:
+              regionId != null && Number.isFinite(regionId) ? regionId : undefined,
             // Timestamp of the ORIGINAL map click (captured before this
             // widget's own async attribute-resolution chain), not of this
             // dispatch — lets downstream listeners (AgriGraff10) detect and
@@ -2655,22 +2658,29 @@ export default class AgriPolygon extends React.PureComponent<
       // sit on the critical path (~seconds) while the index TIFF waited.
       if (earlyUniqueId != null && String(earlyUniqueId).trim() !== "") {
         const earlyNotifyId = String(earlyUniqueId).trim();
+        const attrs = f.attributes as Record<string, any>;
+        const regionFromPoly = resolveRegionIdFromAttributes(attrs);
         this._activeInspectedUniqueid = earlyCleanKey;
         agriMapClickDebug("selection:broadcast-early", {
           uniqueid: earlyNotifyId,
           source: "AgriPopup",
           polygonMode: true,
+          regionId: regionFromPoly,
           destinations: ["AgriLocalization", "AgriGraff10"],
         });
-        this.notifyGraffPolygonSelection(earlyNotifyId, true, clickStartedAt);
+        this.notifyGraffPolygonSelection(
+          earlyNotifyId,
+          true,
+          clickStartedAt,
+          regionFromPoly,
+        );
         // Warm TIFF cache immediately (same tick as click) — uses last
         // region/year/date published by Graff, or available-dates if needed.
-        // Pass the crop so the date walk starts inside its index season
-        // (wheat = Mar/Apr) instead of probing September and eating 400s.
+        // Pass crop + region from the polygon so Portal/republic clicks still
+        // reach export-image when Localization has no viloyat selected yet.
         prefetchVegetationOverlayForUniqueid(earlyNotifyId, {
-          cropId: resolveCropIdFromAttributes(
-            f.attributes as Record<string, any>,
-          ),
+          cropId: resolveCropIdFromAttributes(attrs),
+          regionId: regionFromPoly ?? undefined,
         });
         // Defer FeatureServer series so export-image gets bandwidth first.
         window.setTimeout(() => {
@@ -2822,13 +2832,22 @@ export default class AgriPolygon extends React.PureComponent<
         // Early broadcast already ran when polygon attrs had uniqueid; only
         // notify again if the table join is the first place we saw it.
         if (!earlyCleanKey || earlyCleanKey !== this._activeInspectedUniqueid) {
+          const regionFromPoly = resolveRegionIdFromAttributes(
+            (displayAttrs || f.attributes) as Record<string, any>,
+          );
           agriMapClickDebug("selection:broadcast", {
             uniqueid: cleanUniqueId,
             source: "AgriPopup",
             polygonMode: true,
+            regionId: regionFromPoly,
             destinations: ["AgriLocalization", "AgriGraff10"],
           });
-          this.notifyGraffPolygonSelection(cleanUniqueId, true, clickStartedAt);
+          this.notifyGraffPolygonSelection(
+            cleanUniqueId,
+            true,
+            clickStartedAt,
+            regionFromPoly,
+          );
           void this.fetchLatestVegetationIndices(cleanUniqueId);
         }
       } else {

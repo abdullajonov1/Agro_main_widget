@@ -12,17 +12,49 @@
 import { addDecoder, fromArrayBuffer } from "geotiff";
 import {
   DeflateDecoder,
+  JpegDecoder,
+  LercDecoder,
   LzwDecoder,
   PackbitsDecoder,
   RawDecoder,
+  WebImageDecoder,
+  ZstdDecoder,
+  lercZstd,
+  zstdInit,
 } from "../vendor/geotiff-decoders";
 import { getAgriServiceUrls } from "../shared/agri-service-urls";
 import { getTuriCropLookupKey } from "../shared/agri-crop-labels";
 
+// PreferWorker=false — Portal custom widgets cannot load geotiff's async
+// widgets/chunks/* (publicPath → jimuConfig.baseUrl → 404 on Enterprise).
 addDecoder([undefined, 1], async () => RawDecoder as any, undefined, false);
 addDecoder(5, async () => LzwDecoder as any, undefined, false);
+addDecoder(7, async () => JpegDecoder as any, undefined, false);
 addDecoder([8, 32946], async () => DeflateDecoder as any, undefined, false);
 addDecoder(32773, async () => PackbitsDecoder as any, undefined, false);
+addDecoder(
+  34887,
+  async () => {
+    if (typeof (lercZstd as any)?.init === "function") {
+      await (lercZstd as any).init();
+    }
+    return LercDecoder as any;
+  },
+  undefined,
+  false,
+);
+addDecoder(
+  50000,
+  async () => {
+    if (typeof (zstdInit as any)?.init === "function") {
+      await (zstdInit as any).init();
+    }
+    return ZstdDecoder as any;
+  },
+  undefined,
+  false,
+);
+addDecoder(50001, async () => WebImageDecoder as any, undefined, false);
 
 export function getAgriPolygonApiBaseUrl(): string {
   return getAgriServiceUrls().polygonApiBaseUrl;
@@ -647,6 +679,29 @@ export function resolveCropIdFromAttributes(
     }
   }
   if (turi && getTuriCropLookupKey(turi) === "bugdoy") return 6;
+  return null;
+}
+
+/**
+ * Numeric region_id for export-image from a clicked polygon's attributes.
+ * Needed when Localization has no viloyat selected (republic) or Portal
+ * filter broadcast has not yet mapped viloyat→region.
+ */
+export function resolveRegionIdFromAttributes(
+  attrs: Record<string, any> | null | undefined,
+): number | null {
+  if (!attrs || typeof attrs !== "object") return null;
+  for (const [key, value] of Object.entries(attrs)) {
+    const lower = key.toLowerCase();
+    if (
+      lower === "region" ||
+      lower === "region_id" ||
+      lower === "regionid"
+    ) {
+      const n = Number(value);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
   return null;
 }
 

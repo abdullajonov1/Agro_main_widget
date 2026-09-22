@@ -1,11 +1,11 @@
 {
   "name": "Agro_widgetV5",
-  "label": "Space Agro Monitoring V6.1.3",
+  "label": "Space Agro Monitoring V6.1.4",
   "type": "widget",
-  "version": "6.1.3",
+  "version": "6.1.4",
   "exbVersion": "1.16.0",
   "author": "abdullajonov1",
-  "description": "Space Agro Monitoring. Portal package: https://abdullajonov1.github.io/agri/widgets/Agro_widgetV6/manifest.json — STIR search farmer filter, hover header calibrate, single-date export-image.",
+  "description": "Space Agro Monitoring. Portal package: https://abdullajonov1.github.io/agri/widgets/Agro_widgetV6/manifest.json — portal polygon overlay (static geotiff + region from attrs), STIR filter, hover calibrate.",
   "copyright": "",
   "license": "",
   "properties": {

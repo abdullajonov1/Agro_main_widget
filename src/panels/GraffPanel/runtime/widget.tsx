@@ -150,7 +150,6 @@ import {
 } from "../../../gis/agri-polygon-api-source";
 import {
   getVegetationOverlayDateForRegion,
-  prefetchVegetationOverlayForUniqueid,
   setVegetationOverlayContext,
 } from "../../../gis/agri-vegetation-overlay-prefetch";
 
@@ -1312,11 +1311,15 @@ export default class AgriGraffWidget extends React.PureComponent<
     if (!this._isMounted) return;
     const d: any = (event as CustomEvent).detail || {};
     if (d?.source !== "AgriPopup") return;
+    const regionHint =
+      d.regionId != null && Number.isFinite(Number(d.regionId))
+        ? Number(d.regionId)
+        : null;
     if (d.polygonMode && d.uniqueid) {
       this.syncExternalPolygonSelection(
         String(d.uniqueid),
         true,
-        null,
+        regionHint,
         typeof d.clickedAt === "number" ? d.clickedAt : undefined,
       );
       return;
@@ -1325,7 +1328,7 @@ export default class AgriGraffWidget extends React.PureComponent<
       this.syncExternalPolygonSelection(
         "",
         false,
-        null,
+        regionHint,
         typeof d.clickedAt === "number" ? d.clickedAt : undefined,
       );
     }
@@ -1378,6 +1381,7 @@ export default class AgriGraffWidget extends React.PureComponent<
       });
     }
     if (regionId === undefined) return;
+    if (year === undefined) return;
     const clean = stripUniqueidBraces(uniqueid);
     if (!clean) return;
     const indexKey = (this.state.selectedIndices?.[0] ||
@@ -1413,12 +1417,34 @@ export default class AgriGraffWidget extends React.PureComponent<
         isRegionDateWithImagery(regionId, date));
     if (!dateProven) {
       this.beginVegetationImageSurfaceLoading();
-      prefetchVegetationOverlayForUniqueid(clean, {
+      // Prefetch warms cache for Popup; also apply MediaLayer when the walk
+      // finishes — do not wait only on fetchVegetationData (Portal races
+      // often skip that path when regionId arrives late).
+      void resolveExportImageWithDateWalk({
+        uniqueid: clean,
         regionId,
-        year,
+        year: year as number,
         indiceType: indexKey,
         cropId,
-      });
+      })
+        .then((hit) => {
+          if (!hit || !this._isMounted) return;
+          if (stripUniqueidBraces(this.state.selecteduniqueid) !== clean) return;
+          this.markOverlayDateVerified(clean, hit.date);
+          this._latestRasterDateByUniqueid.set(clean, hit.date);
+          setVegetationOverlayContext({
+            regionId,
+            year,
+            lastDate: hit.date,
+            lastDateRegionId: regionId,
+            lastDateYear: year,
+            lastIndex: indexKey,
+          });
+          void this.applyVegetationImageOverlay(uniqueid, hit.date, indexKey);
+        })
+        .catch(() => {
+          /* fetchVegetationData / apply paths surface errors */
+        });
       AgriGraffWidget.graffLog("kickOptimisticVegetationOverlay:prefetch-dates", {
         uniqueid: clean,
         regionId,
