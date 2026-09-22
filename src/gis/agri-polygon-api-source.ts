@@ -634,8 +634,10 @@ export function pickLatestDateInMonths(
 
 /**
  * `/available-dates` lists dates that have *index records*, but export-image
- * also needs the region's raster scene for that day and answers
- * "No imagery available for region_id=… on …" (HTTP 400) when it is missing.
+ * also needs the region's raster scene for that day. Missing scenes answer:
+ * - HTTP 400: "No imagery available for region_id=… on …" (older API)
+ * - HTTP 404: "No imagery in AdminRaster/… for region='…' on …" (current API)
+ * - HTTP 400: "Imagery for … could not be rendered (no valid pixels …)"
  * That gap is region-wide, so cache it for every polygon of the region.
  */
 export function isExportImageNoImageryError(err: unknown): boolean {
@@ -643,8 +645,22 @@ export function isExportImageNoImageryError(err: unknown): boolean {
   const text = String(
     (err as any)?.responseText || (err as any)?.message || "",
   );
-  if (status !== 400 && !/HTTP\s+400/i.test(text)) return false;
-  return /no imagery available/i.test(text);
+  const statusOk =
+    status === 400 ||
+    status === 404 ||
+    /HTTP\s+40[04]/i.test(text);
+  if (!statusOk) return false;
+  return /no imagery|could not be rendered|no valid pixels/i.test(text);
+}
+
+/** Hard miss — uniqueid not in the year's SDE table; do not probe other dates. */
+export function isExportImagePolygonNotFoundError(err: unknown): boolean {
+  const status = Number((err as any)?.status);
+  const text = String(
+    (err as any)?.responseText || (err as any)?.message || "",
+  );
+  if (status !== 404 && !/HTTP\s+404/i.test(text)) return false;
+  return /uniqueid=.*not found|polygon.*not found/i.test(text);
 }
 
 function regionDateKey(regionId: number | null | undefined, date: string): string {
@@ -870,9 +886,9 @@ const exportDateWalkInFlight = new Map<
 
 /**
  * Fetch available-dates (or use provided), then try export-image **one date
- * at a time** (newest in-season first). On HTTP 400, learn season/imagery
- * gaps and step to the next candidate — never race 2–3 dates in parallel
- * (that was flooding Network on every polygon click).
+ * at a time** (newest in-season first). On HTTP 400/404 season or imagery
+ * gaps, learn and step to the next candidate — never race 2–3 dates in
+ * parallel (that was flooding Network on every polygon click).
  * Deduped so Popup prefetch + Graff share one walk per polygon.
  */
 export async function resolveExportImageWithDateWalk(params: {
@@ -909,8 +925,9 @@ export async function resolveExportImageWithDateWalk(params: {
     if (!dates?.length) return null;
 
     const tried: string[] = [];
-    // Up to 4 sequential probes — stop at first HTTP 200.
-    for (let round = 0; round < 4; round++) {
+    // Up to 6 sequential probes — AdminRaster often gaps several consecutive
+    // April dates (404) before a servable scene (e.g. 2026-04-28).
+    for (let round = 0; round < 6; round++) {
       const candidates = listExportRasterDateCandidates(dates, {
         uniqueid: id,
         cropId: params.cropId,
@@ -933,6 +950,9 @@ export async function resolveExportImageWithDateWalk(params: {
         rememberRegionDateWithImagery(params.regionId, date);
         return { date, result };
       } catch (err) {
+        if (isExportImagePolygonNotFoundError(err)) {
+          return null;
+        }
         if (isExportImageOutOfSeasonError(err)) {
           const months = parseExportImageSeasonMonths(err);
           const crop = parseExportImageCropId(err);
@@ -942,7 +962,7 @@ export async function resolveExportImageWithDateWalk(params: {
         } else if (isExportImageNoImageryError(err)) {
           rememberRegionDateWithoutImagery(params.regionId, date);
         } else {
-          // Non-season/imagery failure — do not burn remaining candidates.
+          // Unknown failure — do not burn remaining candidates blindly.
           return null;
         }
       }

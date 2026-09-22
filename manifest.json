@@ -1,11 +1,11 @@
 {
   "name": "Agro_widgetV5",
-  "label": "Space Agro Monitoring V6.1.6",
+  "label": "Space Agro Monitoring V6.1.7",
   "type": "widget",
-  "version": "6.1.6",
+  "version": "6.1.7",
   "exbVersion": "1.16.0",
   "author": "abdullajonov1",
-  "description": "Space Agro Monitoring. Portal package: https://abdullajonov1.github.io/agri/widgets/Agro_widgetV6/manifest.json — hitTest-immediate field zoom + faster polygon overlay.",
+  "description": "Space Agro Monitoring. Portal package: https://abdullajonov1.github.io/agri/widgets/Agro_widgetV6/manifest.json — treat export-image 404 No imagery as skippable date gap.",
   "copyright": "",
   "license": "",
   "properties": {
