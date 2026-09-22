@@ -2532,6 +2532,51 @@ export default class AgriPolygon extends React.PureComponent<
         : "";
     const hitCleanKey = hitUniqueId.replace(/[{}]/g, "").trim();
     let overlayKickedFromHit = false;
+    let zoomedFromHit = false;
+    const zoomToSelection =
+      this.props.config?.settings?.zoomToSelection !== false;
+
+    // Zoom to the clicked field immediately from hitTest geometry — waiting
+    // for FeatureServer OID query made zoom feel broken / very late.
+    if (zoomToSelection && g.geometry && !isStale()) {
+      try {
+        if (!this._extentBeforeSelection && view.extent?.clone) {
+          this._extentBeforeSelection = view.extent.clone();
+        }
+        const target =
+          (g.geometry as any).extent?.expand?.(1.15) || g.geometry;
+        zoomedFromHit = true;
+        agriMapClickDebug("zoom:start-hit", {
+          uniqueid: hitCleanKey || null,
+          geometryType: g.geometry.type,
+          durationMs: 500,
+        });
+        void view
+          .goTo({ target }, { duration: 500, easing: "ease-in-out" as any })
+          .then(
+            () =>
+              agriMapClickDebug("zoom:complete-hit", {
+                uniqueid: hitCleanKey || null,
+                scale: (view as any).scale,
+              }),
+            (error: any) =>
+              agriMapClickWarn("zoom:failed-hit", {
+                uniqueid: hitCleanKey || null,
+                error: error?.message || String(error),
+              }),
+          );
+      } catch {
+        zoomedFromHit = false;
+      }
+    }
+    if (g.geometry) {
+      try {
+        this.highlightPolygon(g.geometry);
+      } catch {
+        /* OID path may re-highlight */
+      }
+    }
+
     if (hitCleanKey) {
       const activeKeyEarly = String(this._activeInspectedUniqueid || "")
         .replace(/[{}]/g, "")
@@ -2768,21 +2813,23 @@ export default class AgriPolygon extends React.PureComponent<
         }, 650);
       }
 
-      const zoomToEarly = this.props.config?.settings?.zoomToSelection !== false;
+      const zoomToEarly =
+        !zoomedFromHit &&
+        this.props.config?.settings?.zoomToSelection !== false;
       if (zoomToEarly && f.geometry && !isStale()) {
         try {
           if (!this._extentBeforeSelection && view.extent?.clone) {
             this._extentBeforeSelection = view.extent.clone();
           }
           const target =
-            (f.geometry as any).extent?.expand?.(1.08) || f.geometry;
+            (f.geometry as any).extent?.expand?.(1.15) || f.geometry;
           agriMapClickDebug("zoom:start-early", {
             uniqueid: earlyCleanKey || null,
             geometryType: f.geometry.type,
-            durationMs: 650,
+            durationMs: 500,
           });
           void view
-            .goTo({ target }, { duration: 650, easing: "ease-in-out" as any })
+            .goTo({ target }, { duration: 500, easing: "ease-in-out" as any })
             .then(
               () =>
                 agriMapClickDebug("zoom:complete", {
@@ -2798,6 +2845,10 @@ export default class AgriPolygon extends React.PureComponent<
         } catch {
           /* ignore */
         }
+      } else if (zoomedFromHit) {
+        agriMapClickDebug("zoom:skip-oid-already-hit", {
+          uniqueid: earlyCleanKey || hitCleanKey || null,
+        });
       }
 
       try {
