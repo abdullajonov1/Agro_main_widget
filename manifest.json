@@ -1,11 +1,11 @@
 {
   "name": "Agro_widgetV5",
-  "label": "Space Agro Monitoring V6.1.4",
+  "label": "Space Agro Monitoring V6.1.5",
   "type": "widget",
-  "version": "6.1.4",
+  "version": "6.1.5",
   "exbVersion": "1.16.0",
   "author": "abdullajonov1",
-  "description": "Space Agro Monitoring. Portal package: https://abdullajonov1.github.io/agri/widgets/Agro_widgetV6/manifest.json — portal polygon overlay (static geotiff + region from attrs), STIR filter, hover calibrate.",
+  "description": "Space Agro Monitoring. Portal package: https://abdullajonov1.github.io/agri/widgets/Agro_widgetV6/manifest.json — faster polygon overlay (hitTest kickoff, dates cache, paint from walk TIFF).",
   "copyright": "",
   "license": "",
   "properties": {

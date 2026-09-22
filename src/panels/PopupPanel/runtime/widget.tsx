@@ -2519,6 +2519,63 @@ export default class AgriPolygon extends React.PureComponent<
 
     const { graphic: g, queryHitLayer } = hitResult;
 
+    // Kick TIFF ASAP from hitTest attributes — do not wait for FeatureServer
+    // OID query (that used to sit hundreds of ms–seconds on the critical path).
+    const hitAttrs = ((g as any).attributes || {}) as Record<string, any>;
+    const hitUniqueRaw = this.findAttributeValueCaseInsensitive(
+      hitAttrs,
+      AGRI_TABLE_JOIN_FIELD,
+    );
+    const hitUniqueId =
+      hitUniqueRaw != null && String(hitUniqueRaw).trim() !== ""
+        ? String(hitUniqueRaw).trim()
+        : "";
+    const hitCleanKey = hitUniqueId.replace(/[{}]/g, "").trim();
+    let overlayKickedFromHit = false;
+    if (hitCleanKey) {
+      const activeKeyEarly = String(this._activeInspectedUniqueid || "")
+        .replace(/[{}]/g, "")
+        .trim();
+      if (activeKeyEarly && activeKeyEarly === hitCleanKey) {
+        if (this.state.popupMinimized) {
+          agriMapClickDebug("selection:expand-minimized-same-field", {
+            uniqueid: hitCleanKey,
+            source: "hit-attrs",
+          });
+          this.expandPopup();
+          return;
+        }
+        agriMapClickDebug("selection:toggle-off-same-field", {
+          uniqueid: hitCleanKey,
+          source: "hit-attrs",
+        });
+        this.clearHighlight();
+        this._activeInspectedUniqueid = null;
+        this.closePopup({ restoreExtent: true, notifyDeselect: true });
+        return;
+      }
+      const regionFromHit = resolveRegionIdFromAttributes(hitAttrs);
+      this._activeInspectedUniqueid = hitCleanKey;
+      overlayKickedFromHit = true;
+      agriMapClickDebug("selection:broadcast-hit", {
+        uniqueid: hitUniqueId,
+        source: "AgriPopup",
+        polygonMode: true,
+        regionId: regionFromHit,
+        destinations: ["AgriLocalization", "AgriGraff10"],
+      });
+      this.notifyGraffPolygonSelection(
+        hitUniqueId,
+        true,
+        clickStartedAt,
+        regionFromHit,
+      );
+      prefetchVegetationOverlayForUniqueid(hitUniqueId, {
+        cropId: resolveCropIdFromAttributes(hitAttrs),
+        regionId: regionFromHit ?? undefined,
+      });
+    }
+
     try {
       this.setState({
         loading: true,
@@ -2535,6 +2592,7 @@ export default class AgriPolygon extends React.PureComponent<
         attrKeys: g.attributes
           ? Object.keys(g.attributes).slice(0, 8)
           : [],
+        overlayKickedFromHit,
       });
 
       // queryFeatures results have no graphic.layer — use the layer we queried
@@ -2636,8 +2694,14 @@ export default class AgriPolygon extends React.PureComponent<
        * Same already-active field (incl. table selection) clicked on map →
        * deactivate without zooming in again. Graff restores the pre-select extent.
        * If the panel was only minimized, expand it instead of deselecting.
+       * (Hit-attrs path above already handled this when uniqueid was on the graphic.)
        */
-      if (activeKey && earlyCleanKey && activeKey === earlyCleanKey) {
+      if (
+        !overlayKickedFromHit &&
+        activeKey &&
+        earlyCleanKey &&
+        activeKey === earlyCleanKey
+      ) {
         if (this.state.popupMinimized) {
           agriMapClickDebug("selection:expand-minimized-same-field", {
             uniqueid: earlyCleanKey,
@@ -2654,9 +2718,13 @@ export default class AgriPolygon extends React.PureComponent<
         return;
       }
 
-      // Kick Graff overlay + zoom BEFORE Agri_table join — that join used to
-      // sit on the critical path (~seconds) while the index TIFF waited.
-      if (earlyUniqueId != null && String(earlyUniqueId).trim() !== "") {
+      // Kick Graff overlay only if hitTest attrs lacked uniqueid (OID query
+      // was the first place we saw it). Avoid double notify/walk.
+      if (
+        !overlayKickedFromHit &&
+        earlyUniqueId != null &&
+        String(earlyUniqueId).trim() !== ""
+      ) {
         const earlyNotifyId = String(earlyUniqueId).trim();
         const attrs = f.attributes as Record<string, any>;
         const regionFromPoly = resolveRegionIdFromAttributes(attrs);
@@ -2674,22 +2742,29 @@ export default class AgriPolygon extends React.PureComponent<
           clickStartedAt,
           regionFromPoly,
         );
-        // Warm TIFF cache immediately (same tick as click) — uses last
-        // region/year/date published by Graff, or available-dates if needed.
-        // Pass crop + region from the polygon so Portal/republic clicks still
-        // reach export-image when Localization has no viloyat selected yet.
         prefetchVegetationOverlayForUniqueid(earlyNotifyId, {
           cropId: resolveCropIdFromAttributes(attrs),
           regionId: regionFromPoly ?? undefined,
         });
+      }
+
+      const indicesUnique =
+        earlyCleanKey ||
+        hitCleanKey ||
+        String(this._activeInspectedUniqueid || "").replace(/[{}]/g, "").trim();
+      if (indicesUnique) {
         // Defer FeatureServer series so export-image gets bandwidth first.
         window.setTimeout(() => {
           if (!this._isMounted) return;
           const active = String(this._activeInspectedUniqueid || "")
             .replace(/[{}]/g, "")
             .trim();
-          if (active !== earlyCleanKey) return;
-          void this.fetchLatestVegetationIndices(earlyNotifyId);
+          if (active !== indicesUnique) return;
+          void this.fetchLatestVegetationIndices(
+            earlyUniqueId
+              ? String(earlyUniqueId).trim()
+              : hitUniqueId || indicesUnique,
+          );
         }, 650);
       }
 

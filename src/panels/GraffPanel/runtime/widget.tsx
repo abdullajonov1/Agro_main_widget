@@ -146,6 +146,7 @@ import {
   rememberExportImageSeasonMonths,
   rememberRegionDateWithoutImagery,
   resolveExportImageWithDateWalk,
+  type PolygonExportImageResult,
   type VegetationIndiceType,
 } from "../../../gis/agri-polygon-api-source";
 import {
@@ -638,7 +639,10 @@ export default class AgriGraffWidget extends React.PureComponent<
    */
   private _pendingOverlayWalk: {
     uniqueid: string;
-    promise: Promise<{ date: string } | null>;
+    promise: Promise<{
+      date: string;
+      result?: PolygonExportImageResult;
+    } | null>;
   } | null = null;
   private _unbindPopupPolygonSelection: (() => void) | null = null;
   private _mapHoverPrefetchHandle: __esri.Handle | null = null;
@@ -1440,7 +1444,12 @@ export default class AgriGraffWidget extends React.PureComponent<
             lastDateYear: year,
             lastIndex: indexKey,
           });
-          void this.applyVegetationImageOverlay(uniqueid, hit.date, indexKey);
+          void this.applyVegetationImageOverlay(
+            uniqueid,
+            hit.date,
+            indexKey,
+            hit.result,
+          );
         })
         .catch(() => {
           /* fetchVegetationData / apply paths surface errors */
@@ -7054,11 +7063,15 @@ export default class AgriGraffWidget extends React.PureComponent<
    * fetchPolygonExportImageTiff via geotiff.js), so the overlay is
    * positioned directly from that — no separate polygon-geometry lookup
    * needed for placement.
+   *
+   * Pass `prefetched` when the date-walk already decoded the TIFF so we
+   * skip a second network/decode round-trip before MediaLayer paint.
    */
   private applyVegetationImageOverlay = async (
     uniqueid: string,
     rasterDate: string,
     indiceType: VegetationIndiceType = "ndvi",
+    prefetched?: PolygonExportImageResult | null,
   ): Promise<void> => {
     const { activeMapView } = this.state;
     if (!activeMapView?.view?.map) return;
@@ -7145,9 +7158,9 @@ export default class AgriGraffWidget extends React.PureComponent<
     // An unverified date while the dates→TIFF walk is still probing this
     // polygon: wait for the walk instead of racing a parallel export-image
     // that the series date (04-30 in the index table, no regional scene)
-    // would turn into a 400. The walk result is already cached, so the
-    // follow-up fetch below is free.
+    // would turn into a 400. Skip when caller already handed us the walk TIFF.
     if (
+      !prefetched &&
       !this._verifiedOverlayDates.has(`${cleanId}|${normalizedDate}`) &&
       !isRegionDateWithImagery(regionId, normalizedDate)
     ) {
@@ -7298,14 +7311,17 @@ export default class AgriGraffWidget extends React.PureComponent<
         regionId,
         rasterDate: normalizedDate,
         indiceType,
+        prefetched: Boolean(prefetched),
       });
-      const result = await fetchPolygonExportImageTiff({
-        uniqueid: cleanId,
-        regionId,
-        rasterDate: normalizedDate,
-        indiceType,
-        stretch: "fixed",
-      });
+      const result =
+        prefetched ||
+        (await fetchPolygonExportImageTiff({
+          uniqueid: cleanId,
+          regionId,
+          rasterDate: normalizedDate,
+          indiceType,
+          stretch: "fixed",
+        }));
 
       AgriGraffWidget.graffLog("chartPoint:raster-api-response", {
         requestId,
@@ -7746,7 +7762,10 @@ export default class AgriGraffWidget extends React.PureComponent<
         // 400). Popup prefetch + this path share exportDateWalkInFlight.
         // Registered as the pending walk so series/pack overlay paths wait
         // for its verified date instead of probing their own.
-        const walkPromise: Promise<{ date: string } | null> =
+        const walkPromise: Promise<{
+          date: string;
+          result?: PolygonExportImageResult;
+        } | null> =
           availableDatesPromise
             .then(async (dates) => {
               if (isStale() || !dates.length || regionId === undefined) {
@@ -7778,9 +7797,12 @@ export default class AgriGraffWidget extends React.PureComponent<
                   seasonMonths: getExportImageSeasonMonths(cleanId, cropId),
                 },
               );
-              return { date: hit.date };
+              return { date: hit.date, result: hit.result };
             })
-            .catch((): { date: string } | null => null)
+            .catch((): {
+              date: string;
+              result?: PolygonExportImageResult;
+            } | null => null)
             .finally(() => {
               if (this._pendingOverlayWalk?.uniqueid === cleanId) {
                 this._pendingOverlayWalk = null;
@@ -7793,6 +7815,7 @@ export default class AgriGraffWidget extends React.PureComponent<
             this.state.selecteduniqueid,
             hit.date,
             earlyIndexKey,
+            hit.result || null,
           );
         });
       }

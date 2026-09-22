@@ -79,8 +79,47 @@ export interface PolygonAvailableDatesResponse {
 /**
  * GET /v1/polygon/{uniqueid}/available-dates
  * Confirmed response shape: { uniqueid, region, year, count, dates: [] }
+ * In-flight + short TTL cache so Popup prefetch + Graff share one GET.
  */
+const availableDatesInFlight = new Map<string, Promise<string[]>>();
+const availableDatesCache = new Map<
+  string,
+  { dates: string[]; at: number }
+>();
+const AVAILABLE_DATES_TTL_MS = 60_000;
+
 export async function fetchPolygonAvailableDates(
+  uniqueid: string,
+  regionId: number,
+  year: number,
+): Promise<string[]> {
+  const id = String(uniqueid || "").replace(/[{}]/g, "").trim();
+  const key = `${id}|${regionId}|${year}`;
+  const cached = availableDatesCache.get(key);
+  if (cached && Date.now() - cached.at < AVAILABLE_DATES_TTL_MS) {
+    return cached.dates.slice();
+  }
+  let pending = availableDatesInFlight.get(key);
+  if (!pending) {
+    pending = fetchPolygonAvailableDatesUncached(id, regionId, year)
+      .then((dates) => {
+        availableDatesCache.set(key, { dates, at: Date.now() });
+        while (availableDatesCache.size > 64) {
+          const oldest = availableDatesCache.keys().next().value;
+          if (oldest == null) break;
+          availableDatesCache.delete(oldest);
+        }
+        return dates;
+      })
+      .finally(() => {
+        availableDatesInFlight.delete(key);
+      });
+    availableDatesInFlight.set(key, pending);
+  }
+  return pending;
+}
+
+async function fetchPolygonAvailableDatesUncached(
   uniqueid: string,
   regionId: number,
   year: number,
