@@ -35,6 +35,15 @@ export const CROP_RENDERER_ITEMS: Array<{
   { value: "baliqxovuz", label: "Baliqxovuz", color: "#0288D1" },
   { value: "baliq hovuz", label: "Baliqxovuz", color: "#0288D1" },
   { value: "boshqa", label: "Boshqa", color: "#78909C" },
+  { value: "noxat", label: "No'xat", color: "#C48A3A" },
+  { value: "no'xat", label: "No'xat", color: "#C48A3A" },
+  { value: "novot", label: "No'xat", color: "#C48A3A" },
+  { value: "kartoshka", label: "Kartoshka", color: "#C4B08A" },
+  { value: "piyoz", label: "Piyoz", color: "#8E6BB5" },
+  { value: "issiqxona", label: "Issiqxona", color: "#78909C" },
+  { value: "sarimsoq", label: "Sarimsoq", color: "#F5F0E6" },
+  { value: "sarimsoqpiyoz", label: "Sarimsoq", color: "#F5F0E6" },
+  { value: "sarimsoq piyoz", label: "Sarimsoq", color: "#F5F0E6" },
 ];
 
 export function normalizeCropKey(raw: string): string {

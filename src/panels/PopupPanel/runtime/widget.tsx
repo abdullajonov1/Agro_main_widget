@@ -46,7 +46,13 @@ import {
   logPointerStack,
 } from "../../../gis/agri-map-click-debug";
 import { GRAFF_INDEX_ORDER } from "../../GraffPanel/runtime/graff-graph-constants";
-import { normalizeFieldAlias as normalizeFieldAliasShared } from "./popup-field-helpers";
+import {
+  localizedPopupFieldLabel,
+  localizedPopupVhValue,
+  normalizeFieldAlias as normalizeFieldAliasShared,
+} from "./popup-field-helpers";
+import { getCropDisplayName } from "../../../shared/agri-crop-labels";
+import { translateAgriPlaceForDisplay } from "../../../shared/agri-place-display";
 import {
   findAttributeValueCaseInsensitive as findAttributeValueCaseInsensitiveShared,
   formatChartTick as formatChartTickShared,
@@ -3282,8 +3288,12 @@ export default class AgriPolygon extends React.PureComponent<
     if (custom) return custom;
 
     const realName = this.resolveFieldName(name) || name;
+    const localized =
+      localizedPopupFieldLabel(realName, this.state.currentLang) ||
+      localizedPopupFieldLabel(name, this.state.currentLang);
+    if (localized) return localized;
 
-    // Live map layer first — reflects latest ArcGIS field display names
+    // Unknown fields keep the service alias.
     const fromLayer = this.resolveAliasFromLiveLayers(realName);
     if (fromLayer) return fromLayer;
 
@@ -3304,9 +3314,20 @@ export default class AgriPolygon extends React.PureComponent<
     const layerFld = clickedLayer
       ? this.findFieldMetaOnLayer(clickedLayer, realName)
       : null;
-    if (layerFld?.alias) return String(layerFld.alias);
+    const layerAlias = String(layerFld?.alias || "").trim();
+    if (
+      layerAlias &&
+      layerAlias.toLowerCase() !== realName.toLowerCase() &&
+      layerAlias.toLowerCase() !== String(name).toLowerCase()
+    ) {
+      return layerAlias;
+    }
 
-    return realName;
+    return (
+      localizedPopupFieldLabel(realName, this.state.currentLang) ||
+      localizedPopupFieldLabel(name, this.state.currentLang) ||
+      realName
+    );
   }
 
   private formatDateSmart(raw: any): string {
@@ -3314,10 +3335,28 @@ export default class AgriPolygon extends React.PureComponent<
   }
 
   private formatValue(name: string, raw: any): string {
-    return formatPopupAttributeValue(raw, {
+    const formatted = formatPopupAttributeValue(raw, {
       isDateField: this.isDateField(name),
       formatDate: (value) => this.formatDateSmart(value),
     });
+    const key = String(this.resolveFieldName(name) || name)
+      .trim()
+      .toLowerCase();
+    const lang = this.state.currentLang;
+    if (key === "turi" || key === "crop" || key === "uzspace") {
+      const crop = getCropDisplayName(raw, lang);
+      if (crop) return crop;
+    }
+    if (key === "viloyat") {
+      return translateAgriPlaceForDisplay(String(raw ?? ""), lang, "region");
+    }
+    if (key === "tuman") {
+      return translateAgriPlaceForDisplay(String(raw ?? ""), lang, "district");
+    }
+    if (key === "vh" || key === "ndvi_status") {
+      return localizedPopupVhValue(raw, lang) || formatted;
+    }
+    return formatted;
   }
 
   private getOutFields(layer: FeatureLayer, oidField: string): string[] {

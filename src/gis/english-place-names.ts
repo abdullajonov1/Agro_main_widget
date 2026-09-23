@@ -6,7 +6,7 @@ const REGION_NAMES: Record<string, string> = {
   fargona: "Fergana",
   jizzax: "Jizzakh",
   namangan: "Namangan",
-  navoiy: "Navoi",
+  navoiy: "Navoiy",
   qashqadaryo: "Kashkadarya",
   qoraqalpogiston: "Karakalpakstan",
   "qoraqalpogiston respublikasi": "Republic of Karakalpakstan",
@@ -30,13 +30,91 @@ const PLACE_NAMES: Record<string, string> = {
   sayxunobod: "Saykhunabad",
   shirin: "Shirin",
   yangiyer: "Yangiyer",
+  qoqon: "Kokand",
+  margilon: "Margilan",
+  nukus: "Nukus",
+  urganch: "Urgench",
+  qarshi: "Karshi",
+  termiz: "Termez",
+  chirchiq: "Chirchiq",
+  angren: "Angren",
+  bekobod: "Bekabad",
+  olmaliq: "Almalyk",
+  zarafshon: "Zarafshan",
+  denov: "Denov",
+  kitob: "Kitab",
+  shahrisabz: "Shakhrisabz",
+  urgut: "Urgut",
+  bulungur: "Bulungur",
+  paxtakor: "Pakhtakor",
+  zomin: "Zomin",
+  gallaorol: "Gallaorol",
+  quva: "Quva",
+  rishton: "Rishton",
+  oltiariq: "Oltiariq",
+  bagdod: "Baghdad",
+  uchkurgan: "Uchkurgan",
+  chust: "Chust",
+  pop: "Pop",
+  koson: "Kasan",
+  kasbi: "Kasbi",
+  muborak: "Mubarek",
+  nishon: "Nishan",
+  qamashi: "Kamashi",
+  yakkabog: "Yakkabag",
+  shofirkon: "Shofirkon",
+  gijduvon: "Gijduvan",
+  romitan: "Romitan",
+  qorako: "Karakul",
+  yangiariq: "Yangiariq",
+  xonqa: "Khonqa",
+  bogot: "Bogot",
+  hazorasp: "Khazarasp",
+  ellikkala: "Ellikkala",
+  beruniy: "Beruniy",
+  chimboy: "Chimbay",
+  kungrad: "Kungrad",
+  moynoq: "Muynak",
+  tortkol: "Turtkul",
+  xojayli: "Khojayli",
+  bostonliq: "Bostanlyk",
+  boka: "Buka",
+  oqqorgon: "Akkurgan",
+  ortachirchiq: "Urtachirchiq",
+  yuqorichirchiq: "Yukorichirchiq",
+  quyichirchiq: "Kuyichirchiq",
+  yangiyol: "Yangiyul",
+  chinoz: "Chinaz",
+  qibray: "Kibray",
+  piskent: "Piskent",
+  parkent: "Parkent",
+  zangiota: "Zangiota",
+  ohangaron: "Akhangaran",
+  nurafshon: "Nurafshon",
+  qorakol: "Karakul",
+  xojaobod: "Khojaabad",
+  qorgontepa: "Kurgontepa",
+  oltinkol: "Oltinkol",
+  sox: "Sokh",
+  qoshtepa: "Kushtepa",
+  uchkoprik: "Uchkoprik",
+  dostlik: "Dustlik",
+  mirzachol: "Mirzachul",
+  toraqorgon: "Turakurgan",
+  yangiqorgon: "Yangikurgan",
+  shorchi: "Shurchi",
+  jarqorgon: "Jarkurgan",
+  qumqorgon: "Kumkurgan",
+  qoshkopir: "Kushkupir",
+  qongirot: "Kungrad",
+  qoraozak: "Karauzyak",
 };
 
 function normalizePlaceKey(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replace(/[‘’`´]/g, "'")
+    .replace(/[\u0027\u2018\u2019\u201A\u201B\u2032\u2035\u02BC\u02BB\u02BF\u00B4\u0060\u02B9]/g, "'")
     .replace(/\s+/g, " ")
     .replace(/\s+viloyat(?:i)?$/i, "")
     .replace(/\s+tumani$/i, "")
@@ -52,11 +130,12 @@ function titleCase(value: string): string {
 function transliterateUzbekLatin(value: string): string {
   return titleCase(
     value
-      .replace(/g['’‘`]/gi, (token) => token[0] === "G" ? "Gh" : "gh")
-      .replace(/o['’‘`]/gi, (token) => token[0] === "O" ? "O" : "o")
+      .replace(/[\u0027\u2018\u2019\u201A\u201B\u2032\u2035\u02BC\u02BB\u02BF\u00B4\u0060\u02B9]/g, "'")
+      .replace(/g'/gi, (token) => (token[0] === "G" ? "Gh" : "gh"))
+      .replace(/o'/gi, (token) => (token[0] === "O" ? "O" : "o"))
       .replace(/x/g, "kh")
       .replace(/X/g, "Kh")
-      .replace(/['’‘`´]/g, ""),
+      .replace(/'/g, ""),
   );
 }
 
